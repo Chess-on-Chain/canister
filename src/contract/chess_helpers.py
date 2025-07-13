@@ -4,7 +4,10 @@ from kybra import update, query, \
         Principal, service_update, Variant, \
         StableBTreeMap, Vec, void, Opt, nat64, nat16, Record, ic, Tuple
 
-from .types import Match, User
+import chess_types
+
+User = chess_types.User
+Match = chess_types.Match
 
 matchs = StableBTreeMap[nat64, Match](memory_id = 0, max_key_size = 64, max_value_size = 1000)
 last_match_id = 0
