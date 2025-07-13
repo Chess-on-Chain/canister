@@ -1,0 +1,28 @@
+type Match = record {
+  fen : text;
+  moves : vec nat16;
+  timer : opt nat64;
+  whitePlayer : User;
+  blackPlayer : User;
+  winner : text;
+  is_white_turn : bool;
+};
+type User = record {
+  id : principal;
+  win : nat16;
+  username : opt text;
+  draw : nat16;
+  lost : nat16;
+  fullname : opt text;
+  is_banned : bool;
+};
+service : () -> {
+  add_match : (principal, principal) -> (record { nat64; Match });
+  add_match_move : (nat64, nat16) -> (Match);
+  ban : (principal) -> ();
+  get_match : (nat64) -> (Match) query;
+  initialize : (principal, principal) -> ();
+  set_name : (text) -> ();
+  set_username : (text) -> ();
+  unban : (principal) -> ();
+}

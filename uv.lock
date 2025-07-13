@@ -58,6 +58,33 @@ wheels = [
 ]
 
 [[package]]
+name = "chessonchain"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "kybra" },
+    { name = "setuptools" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ic-py" },
+    { name = "isort" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "kybra", specifier = "==0.7.1" },
+    { name = "setuptools", specifier = "==79.*" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ic-py", specifier = ">=1.0.1" },
+    { name = "isort", specifier = ">=6.0.1" },
+]
+
+[[package]]
 name = "ecdsa"
 version = "0.19.1"
 source = { registry = "https://pypi.org/simple" }
@@ -165,31 +192,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/b9/1c/45f978172e8276b95
 wheels = [
     { url = "https://files.pythonhosted.org/packages/99/65/292ca5719a8e7696ab3bf80b975797fad541c17992205bb28c03cf5424ef/kybra-0.7.1-py3-none-any.whl", hash = "sha256:7730c7976b8c83cb0836bc846070834d9cabfc78cea921599b6623f6f977dfee", size = 399730 },
 ]
-
-[[package]]
-name = "kybra-test"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "ic-py" },
-    { name = "kybra" },
-    { name = "setuptools" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "isort" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "ic-py", specifier = ">=1.0.1" },
-    { name = "kybra", specifier = "==0.7.1" },
-    { name = "setuptools", specifier = "==79.*" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "isort", specifier = ">=6.0.1" }]
 
 [[package]]
 name = "leb128"
