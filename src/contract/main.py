@@ -1,15 +1,14 @@
-from kybra import update, query, \
-    ic, Async, Service, nat8, CallResult, \
-        Principal, service_update, Variant, \
-        StableBTreeMap, Vec, void, Opt, nat64, nat16, Record, ic, Tuple
+import random
+import re
 
-import random, re
-
+import chess_helpers as helpers
 import chess_types
+from kybra import Principal, Tuple, Vec, ic, nat16, nat64, query, update, void
 
 User = chess_types.User
 Match = chess_types.Match
 
+last_match_id: nat64 = 0
 owner = ic.caller()
 
 # class Chess(Service):
@@ -20,10 +19,6 @@ owner = ic.caller()
 # chess = Chess(Principal.from_str('uzt4z-lp777-77774-qaabq-cai'))
 
 INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-
-
-import chess_helpers as helpers
-
 
 @update
 def set_username(new_username: str) -> void:

@@ -1,10 +1,5 @@
-from kybra import Principal, ic
-from kybra import update, query, \
-    ic, Async, Service, nat8, CallResult, \
-        Principal, service_update, Variant, \
-        StableBTreeMap, Vec, void, Opt, nat64, nat16, Record, ic, Tuple
-
 import chess_types
+from kybra import Principal, StableBTreeMap, ic, nat64, void
 
 User = chess_types.User
 Match = chess_types.Match

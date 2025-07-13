@@ -1,4 +1,5 @@
-from kybra import Record, nat16, Opt, Vec
+from kybra import Opt, Record, Vec, nat16
+
 
 class User(Record):
     win: nat16
