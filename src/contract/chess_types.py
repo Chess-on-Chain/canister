@@ -17,8 +17,9 @@ class User(Record):
 
 
 class Match(Record):
-    whitePlayer: User
-    blackPlayer: User
+    id: str
+    white_player: User
+    black_player: User
     moves: Vec[nat16]
     fen: str
     is_white_turn: bool
