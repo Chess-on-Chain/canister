@@ -1,0 +1,8 @@
+{
+  "canisters": {
+    "contract": {
+      "type": "kybra",
+      "main": "src/contract/main.py"
+    }
+  }
+}

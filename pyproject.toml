@@ -1,0 +1,11 @@
+[project]
+name = "kybra-test"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = "==3.10.*"
+dependencies = [
+    "ic-py>=1.0.1",
+    "kybra==0.7.1",
+    "setuptools==79.*",
+]
