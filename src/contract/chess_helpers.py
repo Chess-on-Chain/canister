@@ -15,8 +15,6 @@ def inject_history(match_id: str):
         histories = storages.histories.get(principal) or Vec()
         histories.append(match_['id'])
 
-        storages.histories.insert(principal, histories)
-
 
 def decide_win(match_id: str, pawn: str) -> void:
     """putuskan pemenang"""
@@ -40,7 +38,7 @@ def decide_win(match_id: str, pawn: str) -> void:
             match_['white_player']['lost'] += 1
             match_['winner'] = 'black'
             
-        storages.matchs.insert(match_['id'], match_)
+        # storages.matchs.insert(match_['id'], match_)
         inject_history(match_['id'])
 
     return inner
@@ -68,5 +66,5 @@ def get_or_create_user(principal: Principal) -> User:
     return user
 
 
-def update_user(user: User) -> void:
-    storages.users.insert(ic.caller(), user)
+# def update_user(user: User) -> void:
+#     storages.users.insert(ic.caller(), user)

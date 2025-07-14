@@ -10,3 +10,7 @@ wheels/
 \.venv
 \.dfx
 \.kybra
+
+# Added by cargo
+
+/target

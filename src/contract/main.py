@@ -61,14 +61,14 @@ def set_username(new_username: str) -> void:
     
     storages.username_exists.insert(new_username, True)
     user['username'] = new_username
-    functions.update_user(user)
+    # functions.update_user(user)
 
 
 @update
 def set_name(fullname: str) -> void:
     user = functions.get_or_create_user(ic.caller())
     user['fullname'] = fullname
-    functions.update_user(user)
+    # functions.update_user(user)
 
 @query
 def get_user(principal: Principal) -> Opt[User]:
@@ -93,7 +93,7 @@ def ban(principal: Principal) -> void:
     user = functions.get_or_create_user(principal)
     user['is_banned'] = True
 
-    functions.update_user(user)
+    # functions.update_user(user)
 
 
 @update
@@ -104,7 +104,7 @@ def unban(principal: Principal) -> void:
     user = storages.users.get(principal)
     user['is_banned'] = False
 
-    functions.update_user(user)
+    # functions.update_user(user)
 
 
 @update
@@ -145,6 +145,8 @@ def add_match(principalA: Principal, principalB: Principal) -> Tuple[str, Match]
 @update
 def add_match_move(match_id: str, move: nat16) -> Async[Match]:
     match_ = storages.matchs.get(match_id)
+    ic.print(match_id)
+    ic.print(match_)
 
     caller = ic.caller()
 
@@ -201,8 +203,8 @@ def add_match_move(match_id: str, move: nat16) -> Async[Match]:
             functions.decide_win(match_id, "black")() # perubahan match di-commit disini
         else:
             functions.decide_win(match_id, "white")() # perubahan match di-commit disini
-    else:
-        storages.matchs.insert(match_id, match_) # commit change
+    # else:
+    #     storages.matchs.insert(match_id, match_) # commit change
 
     return match_
 
