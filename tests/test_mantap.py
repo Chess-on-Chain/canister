@@ -53,7 +53,7 @@ def add_match():
     match_id = res[0][0]
     print(match_id)
     match_ = res[0][1]
-    white_player_address = match_['white_player']['id'].to_str()
+    white_player_address = match_['white_player'].to_str()
 
     chars = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 

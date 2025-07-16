@@ -68,6 +68,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "ecdsa" },
     { name = "ic-py" },
     { name = "isort" },
 ]
@@ -80,6 +81,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "ecdsa", specifier = ">=0.19.1" },
     { name = "ic-py", specifier = ">=1.0.1" },
     { name = "isort", specifier = ">=6.0.1" },
 ]

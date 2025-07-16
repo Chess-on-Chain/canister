@@ -1,19 +1,37 @@
+import pickle
+
+import chess_storages
 import chess_types
-from kybra import Principal, Service, nat8, service_query, void
+from kybra import Service, nat8, service_query, void
 
 NextMoveAndStatusOutput = chess_types.NextMoveAndStatusOutput
+Principal = chess_types.Principal
 
 class Chess(Service):
     @service_query
     def next_move_and_status(self, fen: str, from_position: nat8, to_position: nat8) -> NextMoveAndStatusOutput:
         ...
 
-_engine = Chess(Principal())
+
+_chess = None
 
 def get_engine() -> Chess:
-    return _engine
+    global _chess
+
+    if not _chess is None:
+        return _chess
+
+    engine = chess_storages.stable.get("engine")
+    if engine is None:
+        return Chess(Principal())
+    
+    engine = pickle.loads(engine)
+    return engine
+
 
 def change_principal(principal: Principal) -> void:
-    global _engine
+    global _chess
 
-    _engine = Chess(principal)
+    chess = Chess(principal)
+    chess_storages.stable.insert("engine", pickle.dumps(chess))
+    _chess = None

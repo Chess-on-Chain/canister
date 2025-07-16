@@ -1,90 +1,103 @@
-
 import os
 import random
-import re
 
+import chess_constant
 import chess_decorators as decorators
 import chess_engine
 import chess_helpers as functions
 import chess_storages as storages
 import chess_types
-from kybra import (Async, CallResult, Duration, Opt, Principal, Tuple, Vec, ic,
-                   nat16, query, update, void)
+from kybra import (Async, CallResult, Opt, Tuple, Vec, ic, nat16, query,
+                   update, void)
 
+# import re
+
+
+Principal = chess_types.Principal
 User = chess_types.User
 Match = chess_types.Match
+MatchResult = chess_types.MatchResult
+MatchResultHistory = chess_types.MatchResultHistory
+
+
+INITIAL_FEN = chess_constant.INITIAL_FEN
+TIMEOUT_DURATION = chess_constant.TIMEOUT_DURATION
+
 get_engine = chess_engine.get_engine
 only_owner = decorators.only_owner
 
-INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-TIMEOUT_DURATION = Duration(60) # jika user tidak bergerak selama 60 detik maka dianggap gugur
-_initialized: bool = False
-
-
 @update
 def initialize(_owner: Principal, engine: Principal) -> void:
-    global _initialized
+    initialized = bool(storages.stable.get("initialized") or b'')
 
-    assert not _initialized, "Already initialized"
-    _initialized = True
+    assert not initialized, "Already initialized"
 
     chess_engine.change_principal(engine)
-    storages.owner = _owner
+    functions.transfer_ownership(_owner)
+
+    storages.stable.insert("initialized", bytes(True))
 
 
 @update
 @only_owner
 def transfer_ownership(new_owner: Principal) -> void:
-    storages.otwOwner = new_owner
+    storages.otw_owner = new_owner
 
 
 @update
 def accept_ownership() -> void:
-    assert storages.otwOwner.to_str() == ic.caller().to_str(), "Bukan lu bang"
+    assert storages.otw_owner.to_str() == ic.caller().to_str(), "Bukan lu bang"
 
-    storages.owner = storages.otwOwner
-    storages.otwOwner = Principal(bytes(4))
+    functions.transfer_ownership(storages.otw_owner)
+    storages.otw_owner = Principal(bytes(4))
 
+# @update
+# def set_username(new_username: str) -> void:
+#     user = functions.get_or_create_user(ic.caller())
 
-@update
-def set_username(new_username: str) -> void:
-    user = functions.get_or_create_user(ic.caller())
-
-    if user['username'] != None:
-        raise ValueError("username already set")
+#     if user['username'] != None:
+#         raise ValueError("username already set")
     
-    if storages.username_exists.contains_key(new_username):
-        raise ValueError("username already exists")
+#     if storages.username_exists.contains_key(new_username):
+#         raise ValueError("username already exists")
     
-    if not re.match(r'^[a-z0-9_]{3,20}$', new_username):
-        raise ValueError("username not valid")
+#     if not re.match(r'^[a-z0-9_]{3,20}$', new_username):
+#         raise ValueError("username not valid")
     
-    storages.username_exists.insert(new_username, True)
-    user['username'] = new_username
-    # functions.update_user(user)
+#     storages.username_exists.insert(new_username, True)
+#     user['username'] = new_username
+#     functions.update_current_user(user)
 
 
-@update
-def set_name(fullname: str) -> void:
-    user = functions.get_or_create_user(ic.caller())
-    user['fullname'] = fullname
-    # functions.update_user(user)
+# @update
+# def set_name(fullname: str) -> void:
+#     user = functions.get_or_create_user(ic.caller())
+#     user['fullname'] = fullname
+#     functions.update_current_user(user)
 
 @query
 def get_user(principal: Principal) -> Opt[User]:
-    # ic.print(principal)
     user = storages.users.get(principal)
-    # ic.print(user)
-    # ic.print(storages.users)
     return user
 
 @query
-def get_histories(principal: Principal, start_from: nat16, count: nat16) -> Vec[Match]:
+def get_histories(principal: Principal, start_from: nat16, count: nat16) -> Vec[MatchResultHistory]:
     histories = storages.histories.get(principal)[start_from:start_from + count]
-    result: Vec[Match] = Vec()
+    result: Vec[MatchResultHistory] = Vec()
 
     for history in histories:
-        result.append(storages.matchs.get(history))
+        match_ = storages.matchs.get(history)
+
+        match_result = MatchResultHistory(
+            id = match_['id'],
+            fen = match_['fen'],
+            moves = match_['moves'],
+            winner = match_['winner'],
+            white_player = match_['white_player'],
+            black_player = match_['black_player']
+        )
+
+        result.append(match_result)
 
     return result
 
@@ -96,7 +109,7 @@ def ban(principal: Principal) -> void:
     user = functions.get_or_create_user(principal)
     user['is_banned'] = True
 
-    # functions.update_user(user)
+    functions.update_current_user(user)
 
 
 @update
@@ -107,23 +120,19 @@ def unban(principal: Principal) -> void:
     user = storages.users.get(principal)
     user['is_banned'] = False
 
-    # functions.update_user(user)
+    functions.update_current_user(user)
 
 
 @update
 @only_owner
 def add_match(principalA: Principal, principalB: Principal) -> Tuple[str, Match]:
     # Bidak putih dan hitam di-random oleh system
-    ic.print("MATCH")
     users_ = [
         functions.get_or_create_user(principalA),
         functions.get_or_create_user(principalB)
     ]
-    
-    random.shuffle(users_)
 
-    # ic.print(users_)
-    # ic.print(storages.users.values())
+    random.shuffle(users_)
 
     userA, userB = users_
 
@@ -131,15 +140,14 @@ def add_match(principalA: Principal, principalB: Principal) -> Tuple[str, Match]
 
     match_ = Match(
         id = match_id,
-        white_player = userA,
-        black_player = userB,
+        white_player = userA['id'],
+        black_player = userB['id'],
         moves = Vec(),
         fen = INITIAL_FEN,
         is_white_turn = True,
         winner = "ongoing",
         timer = None,
     )
-
 
     timer = ic.set_timer(TIMEOUT_DURATION, functions.decide_win(match_id, "black"))
     match_['timer'] = timer
@@ -159,9 +167,9 @@ def add_match_move(match_id: str, move: nat16) -> Async[Match]:
     assert match_['winner'] == "ongoing", "match already closed"
     
     if match_['is_white_turn']:
-        assert caller.to_str() == match_['white_player']['id'].to_str(), "forbidden"
+        assert str(caller) == str(match_['white_player']), "forbidden"
     else:
-        assert caller.to_str() == match_['black_player']['id'].to_str(), "forbidden"
+        assert str(caller) == str(match_['black_player']), "forbidden"
 
     match_['moves'].append(move)
 
@@ -190,13 +198,10 @@ def add_match_move(match_id: str, move: nat16) -> Async[Match]:
     match_['timer'] = timer_id
 
     new_fen = result_from_canister.Ok['fen']
-    # ic.print("NEW FEN:", new_fen)
-
 
     status = result_from_canister.Ok['status']
     turn = status // 10
     game_status = status % 10
-    # ic.print(status)
 
     match_['fen'] = new_fen
     match_['is_white_turn'] = turn == 1
@@ -208,18 +213,24 @@ def add_match_move(match_id: str, move: nat16) -> Async[Match]:
             functions.decide_win(match_id, "black")() # perubahan match di-commit disini
         else:
             functions.decide_win(match_id, "white")() # perubahan match di-commit disini
-    # else:
-    #     storages.matchs.insert(match_id, match_) # commit change
+    else:
+        storages.matchs.insert(match_id, match_) # commit change
 
     return match_
 
 
 @query
-def get_match(match_id: str) -> Match:
+def get_match(match_id: str) -> MatchResult:
     match_ = storages.matchs.get(match_id)
-    # if match_ is None:
-    #     raise ValueError("match not found")
-
     assert match_ != None, "match not found"
 
-    return match_
+    result = MatchResult(
+        id = match_['id'],
+        fen = match_['fen'],
+        moves = match_['moves'],
+        winner = match_['winner'],
+        white_player = storages.users.get(match_['white_player']),
+        black_player = storages.users.get(match_['black_player']),
+    )
+
+    return result
