@@ -1,5 +1,6 @@
+from typing import Generic, TypeVar
+
 from kybra import Opt, Principal, Record, TimerId, Vec, nat8, nat16
-from typing import TypeVar, Generic
 
 K = TypeVar("K")
 V = TypeVar("V")
@@ -14,6 +15,24 @@ class DictState(dict[K, V], Generic[K, V]):
 
     def is_empty(self) -> bool:
         return len(self.keys()) == 0
+
+
+O = TypeVar('O')
+
+
+class PrincipalKeyDataState(DictState, dict[str, O], Generic[O]):
+    """
+    DictState biasa selalu menigirim param key dengan tipe string 
+    di fn get dan __eq__ nya tidak konsisten untuk Principal
+    """
+    def get(self, key: Principal) -> O:
+        return DictState.get(self, str(key))
+    
+    def insert(self, key: Principal, value: O) -> Opt[O]:
+        return DictState.insert(self, key.to_str(), value)
+
+    def contains_key(self, key: Principal) -> bool:
+        return DictState.contains_key(self, key.to_str())
 
 
 class NextMoveAndStatusOutput(Record):

@@ -12,7 +12,10 @@ def inject_history(match_id: str):
     principals = (match_['black_player']['id'], match_['white_player']['id'])
 
     for principal in principals:
-        histories = storages.histories.get(principal) or Vec()
+        histories = storages.histories.get(principal)
+        if histories is None:
+            histories = storages.histories.insert(principal, Vec())
+
         histories.append(match_['id'])
 
 

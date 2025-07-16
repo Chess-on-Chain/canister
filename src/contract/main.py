@@ -56,7 +56,7 @@ def set_username(new_username: str) -> void:
     if storages.username_exists.contains_key(new_username):
         raise ValueError("username already exists")
     
-    if not re.match(r'[a-z0-9_]{3,20}', new_username):
+    if not re.match(r'^[a-z0-9_]{3,20}$', new_username):
         raise ValueError("username not valid")
     
     storages.username_exists.insert(new_username, True)
@@ -72,7 +72,10 @@ def set_name(fullname: str) -> void:
 
 @query
 def get_user(principal: Principal) -> Opt[User]:
+    # ic.print(principal)
     user = storages.users.get(principal)
+    # ic.print(user)
+    # ic.print(storages.users)
     return user
 
 @query
@@ -111,12 +114,16 @@ def unban(principal: Principal) -> void:
 @only_owner
 def add_match(principalA: Principal, principalB: Principal) -> Tuple[str, Match]:
     # Bidak putih dan hitam di-random oleh system
+    ic.print("MATCH")
     users_ = [
         functions.get_or_create_user(principalA),
         functions.get_or_create_user(principalB)
     ]
     
     random.shuffle(users_)
+
+    # ic.print(users_)
+    # ic.print(storages.users.values())
 
     userA, userB = users_
 
@@ -145,8 +152,6 @@ def add_match(principalA: Principal, principalB: Principal) -> Tuple[str, Match]
 @update
 def add_match_move(match_id: str, move: nat16) -> Async[Match]:
     match_ = storages.matchs.get(match_id)
-    ic.print(match_id)
-    ic.print(match_)
 
     caller = ic.caller()
 

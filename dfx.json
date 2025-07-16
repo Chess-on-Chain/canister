@@ -3,6 +3,11 @@
     "contract": {
       "type": "kybra",
       "main": "src/contract/main.py"
+    },
+    "engine": {
+      "candid": "src/engine/engine.did",
+      "package": "engine",
+      "type": "rust"
     }
   }
 }

@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "src/engine",
+    ".kybra/contract"
+]
+resolver = "2"

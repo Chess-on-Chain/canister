@@ -6,12 +6,12 @@ from ic.agent import Agent
 # from ic.candid import encode, Types
 import pathlib
 
-CANISTER_ID = "u6s2n-gx777-77774-qaaba-cai"
-ENGINE_CANISTER_ID = "uxrrr-q7777-77774-qaaaq-cai"
+CANISTER_ID = "uxrrr-q7777-77774-qaaaq-cai"
+ENGINE_CANISTER_ID = "u6s2n-gx777-77774-qaaba-cai"
 
 owner = Identity("b975a136bae81f98b65142d060eec48af125b14a9f733919d02eb49e90143863")
-playerA = Identity()
-playerB = Identity()
+playerA = Identity("e7a3f1f8f2787430f2b9860da4fad3c51f21b20bd8b87110fdbb630cecfe8c2b")
+playerB = Identity("71cb0af95cf6e19f371a1fbf8ae6236e53869ab08ded65afceb0a8f9adec5c12")
 
 client = Client("http://127.0.0.1:4943")
 contract_did = open(
@@ -31,6 +31,10 @@ def get_canister(ii: Identity):
 agentOwner = get_canister(owner)
 agentPlayerA = get_canister(playerA)
 agentPlayerB = get_canister(playerB)
+
+print(playerA.sender().to_str())
+print(playerB.sender().to_str())
+
 
 def initialize():
     res = agentOwner.initialize(
@@ -60,7 +64,7 @@ def add_match():
         ("B8", "C6"),  # 2... Nc6
         ("D1", "H5"),  # 3. Qh5
         ("G8", "F6"),  # 3... Nf6
-        # ("H5", "F7")   # 4. Qxf7# → Checkmate
+        ("H5", "F7")   # 4. Qxf7# → Checkmate
     ]
 
     whitePlayer, blackPlayer = agentPlayerA, agentPlayerB
@@ -84,7 +88,7 @@ def add_match():
         else:
             match_ = blackPlayer.add_match_move(match_id, turn)[0]
 
-        # print(match_)
+        print(match_)
 
 try:
     initialize()
