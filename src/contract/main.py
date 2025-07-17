@@ -1,4 +1,3 @@
-import os
 import random
 
 import chess_constant
@@ -12,7 +11,6 @@ from kybra import (Async, CallResult, Opt, Tuple, Vec, ic, nat16, query,
 
 # import re
 
-
 Principal = chess_types.Principal
 User = chess_types.User
 Match = chess_types.Match
@@ -25,6 +23,8 @@ TIMEOUT_DURATION = chess_constant.TIMEOUT_DURATION
 
 get_engine = chess_engine.get_engine
 only_owner = decorators.only_owner
+
+rand = random.Random(ic.time())
 
 @update
 def initialize(_owner: Principal, engine: Principal) -> void:
@@ -124,8 +124,26 @@ def unban(principal: Principal) -> void:
 
 
 @update
+def resign() -> void:
+    caller = ic.caller()
+    active_match = storages.active_matchs.get(caller.to_str())
+
+    assert not active_match is None
+
+    match_id, caller_pawn = active_match
+
+    functions.decide_win(match_id, 'white' if caller_pawn == 'black' else 'black')()
+
+
+
+@update
 @only_owner
 def add_match(principalA: Principal, principalB: Principal) -> Tuple[str, Match]:
+    match_id = rand.randbytes(12).hex()
+
+    assert not storages.active_matchs.get(principalA.to_str()), "A main"
+    assert not storages.active_matchs.get(principalB.to_str()), "B main"
+
     # Bidak putih dan hitam di-random oleh system
     users_ = [
         functions.get_or_create_user(principalA),
@@ -136,7 +154,9 @@ def add_match(principalA: Principal, principalB: Principal) -> Tuple[str, Match]
 
     userA, userB = users_
 
-    match_id = os.urandom(12).hex()
+    # masukan ke heap memory pertandingan aktif
+    storages.active_matchs[userA['id'].to_str()] = (match_id, 'white')
+    storages.active_matchs[userB['id'].to_str()] = (match_id, 'black')
 
     match_ = Match(
         id = match_id,
