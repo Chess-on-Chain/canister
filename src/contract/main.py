@@ -218,6 +218,9 @@ def add_match_move(match_id: str, move: nat16) -> Async[Match]:
     if game_status == 1:
         yield functions.decide_win(match_id, "draw")()
     elif game_status == 2:
+        if match_['timer'] != None:
+            ic.clear_timer(match_['timer'])
+            
         if turn == 1:
             yield functions.decide_win(match_id, "black")() # perubahan match di-commit disini
         else:

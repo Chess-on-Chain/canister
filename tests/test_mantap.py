@@ -60,12 +60,12 @@ def add_match():
 
     moves = [
         ("E2", "E4"),  # 1. e4
-        # ("E7", "E5"),  # 1... e5
-        # ("F1", "C4"),  # 2. Bc4
-        # ("B8", "C6"),  # 2... Nc6
-        # ("D1", "H5"),  # 3. Qh5
-        # ("G8", "F6"),  # 3... Nf6
-        # ("H5", "F7")   # 4. Qxf7# → Checkmate
+        ("E7", "E5"),  # 1... e5
+        ("F1", "C4"),  # 2. Bc4
+        ("B8", "C6"),  # 2... Nc6
+        ("D1", "H5"),  # 3. Qh5
+        ("G8", "F6"),  # 3... Nf6
+        ("H5", "F7")   # 4. Qxf7# → Checkmate
     ]
 
     whitePlayer, blackPlayer = agentPlayerA, agentPlayerB
@@ -93,7 +93,8 @@ def add_match():
 
 try:
     initialize()
-except:
+except Exception as e:
+    # raise e
     pass
 
 add_match()
