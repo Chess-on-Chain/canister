@@ -157,10 +157,12 @@ def add_match(principalA: Principal, principalB: Principal) -> Tuple[str, Match]
 
     
 @update
-def add_match_move(match_id: str, move: nat16) -> Async[Match]:
+def add_match_move(match_id: str, move: nat16, promotion: Opt[str]) -> Async[Match]:
     match_ = storages.matchs.get(match_id)
-
     caller = ic.caller()
+
+    if promotion == "0":
+        promotion = None
 
     assert match_ != None, "match not found"
     assert match_['winner'] == "ongoing", "match already closed"
@@ -179,10 +181,13 @@ def add_match_move(match_id: str, move: nat16) -> Async[Match]:
     from_pos = move // 1000 # ex: 8
     to_pos = move % 1000 # ex: 24
 
-    result_from_canister: CallResult[chess_types.NextMoveAndStatusOutput] = yield get_engine().next_move_and_status(
+    result_from_canister: CallResult[
+        chess_types.NextMoveAndStatusOutput
+    ] = yield get_engine().next_move_and_status(
         current_fen,
         from_pos,
-        to_pos
+        to_pos,
+        promotion
     )
     assert result_from_canister.Err == None, "error request to engine canister: %s" % result_from_canister.Err
 

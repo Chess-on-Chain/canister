@@ -43,6 +43,7 @@ def initialize():
     )
     print("Initialize:", res)
 
+
 def add_match():
     # print(playerA.sender().to_str())
     res = agentOwner.add_match(
@@ -84,9 +85,9 @@ def add_match():
         print(move, turn)
 
         if match_['is_white_turn']:
-            match_ = whitePlayer.add_match_move(match_id, turn)[0]
+            match_ = whitePlayer.add_match_move(match_id, turn, "0")[0]
         else:
-            match_ = blackPlayer.add_match_move(match_id, turn)[0]
+            match_ = blackPlayer.add_match_move(match_id, turn, "0")[0]
 
         print(match_)
 
