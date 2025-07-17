@@ -24,7 +24,7 @@ TIMEOUT_DURATION = chess_constant.TIMEOUT_DURATION
 get_engine = chess_engine.get_engine
 only_owner = decorators.only_owner
 
-rand = random.Random(ic.time())
+random.seed(ic.time())
 
 @update
 def initialize(_owner: Principal, engine: Principal) -> void:
@@ -135,14 +135,13 @@ def resign() -> void:
     functions.decide_win(match_id, 'white' if caller_pawn == 'black' else 'black')()
 
 
-
 @update
 @only_owner
 def add_match(principalA: Principal, principalB: Principal) -> Tuple[str, Match]:
-    match_id = rand.randbytes(12).hex()
+    match_id = random.randbytes(12).hex()
 
-    assert not storages.active_matchs.get(principalA.to_str()), "A main"
-    assert not storages.active_matchs.get(principalB.to_str()), "B main"
+    assert not storages.active_matchs.get(principalA.to_str()), "Player A is playing"
+    assert not storages.active_matchs.get(principalB.to_str()), "Player B is playing"
 
     # Bidak putih dan hitam di-random oleh system
     users_ = [
