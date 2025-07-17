@@ -5,6 +5,8 @@ Principal = chess_types.Principal
 User = chess_types.User
 Match = chess_types.Match
 
+webhooks = {}
+
 matchs = StableBTreeMap[str, Match](memory_id = 0, max_key_size = 96, max_value_size = 1000)
 
 # matchs: DictState[str, Match] = DictState()

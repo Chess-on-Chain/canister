@@ -51,3 +51,12 @@ class MatchResultHistory(Record):
     moves: Vec[nat16]
     fen: str
     winner: str # Literal['white', 'black', 'draw', 'ongoing']
+
+
+class WebhookData(Record):
+    webhook_id: str
+    match_id: str
+    white_player: str
+    black_player: str
+    winner: str
+    winner_player: str
