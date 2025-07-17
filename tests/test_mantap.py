@@ -15,7 +15,7 @@ playerB = Identity("71cb0af95cf6e19f371a1fbf8ae6236e53869ab08ded65afceb0a8f9adec
 
 client = Client("http://127.0.0.1:4943")
 contract_did = open(
-    pathlib.Path(__file__).parent / 'contract.did'
+    pathlib.Path(__file__).parent.parent / '.kybra/contract/contract.did'
 ).read()
 
 def get_canister(ii: Identity):

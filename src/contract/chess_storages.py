@@ -13,7 +13,7 @@ users = StableBTreeMap[Principal, User](memory_id = 1, max_key_size = 100, max_v
 
 # users: PrincipalKeyDataState[User] = PrincipalKeyDataState()
 
-username_exists = StableBTreeMap[str, bool](memory_id = 2, max_key_size = 20, max_value_size = 8)
+# username_exists = StableBTreeMap[str, bool](memory_id = 2, max_key_size = 20, max_value_size = 8)
 
 # username_exists: DictState[str, bool] = DictState()
 
