@@ -1,4 +1,3 @@
-import os
 import random
 
 import chess_constant
@@ -136,7 +135,7 @@ def add_match(principalA: Principal, principalB: Principal) -> Tuple[str, Match]
 
     userA, userB = users_
 
-    match_id = os.urandom(12).hex()
+    match_id = random.randbytes(12).hex()
 
     match_ = Match(
         id = match_id,
@@ -209,6 +208,9 @@ def add_match_move(match_id: str, move: nat16) -> Async[Match]:
     if game_status == 1:
         functions.decide_win(match_id, "draw")()
     elif game_status == 2:
+        if match_['timer'] != None:
+            ic.clear_timer(match_['timer'])
+            
         if turn == 1:
             functions.decide_win(match_id, "black")() # perubahan match di-commit disini
         else:
