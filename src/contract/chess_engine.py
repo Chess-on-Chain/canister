@@ -2,14 +2,14 @@ import pickle
 
 import chess_storages
 import chess_types
-from kybra import Service, nat8, service_query, void
+from kybra import Opt, Service, nat8, service_query, void
 
 NextMoveAndStatusOutput = chess_types.NextMoveAndStatusOutput
 Principal = chess_types.Principal
 
 class Chess(Service):
     @service_query
-    def next_move_and_status(self, fen: str, from_position: nat8, to_position: nat8) -> NextMoveAndStatusOutput:
+    def next_move_and_status(self, fen: str, from_position: nat8, to_position: nat8, promotion_to: Opt[str]) -> NextMoveAndStatusOutput:
         ...
 
 
