@@ -8,6 +8,7 @@ import chess_storages as storages
 import chess_types
 from kybra import (Async, CallResult, Opt, Tuple, Vec, ic, nat16, query,
                    update, void)
+from kybra.canisters.management import HttpResponse, HttpTransformArgs
 
 # import re
 
@@ -16,6 +17,7 @@ User = chess_types.User
 Match = chess_types.Match
 MatchResult = chess_types.MatchResult
 MatchResultHistory = chess_types.MatchResultHistory
+WebhookData = chess_types.WebhookData
 
 
 INITIAL_FEN = chess_constant.INITIAL_FEN
@@ -27,7 +29,7 @@ only_owner = decorators.only_owner
 random.seed(ic.time())
 
 @update
-def initialize(_owner: Principal, engine: Principal) -> void:
+def initialize(_owner: Principal, engine: Principal, webhook_url: str) -> void:
     initialized = bool(storages.stable.get("initialized") or b'')
 
     assert not initialized, "Already initialized"
@@ -36,6 +38,13 @@ def initialize(_owner: Principal, engine: Principal) -> void:
     functions.transfer_ownership(_owner)
 
     storages.stable.insert("initialized", bytes(True))
+    functions.change_webhook_url(webhook_url)
+
+
+@update
+@only_owner
+def change_webhook_url(new_webhook_url: str) -> void:
+    functions.change_webhook_url(new_webhook_url)
 
 
 @update
@@ -232,15 +241,15 @@ def add_match_move(match_id: str, move: nat16, promotion: str) -> Async[Match]:
     match_['is_white_turn'] = turn == 1
     
     if game_status == 1:
-        functions.decide_win(match_id, "draw")()
+        yield functions.decide_win(match_id, "draw")()
     elif game_status == 2:
         if match_['timer'] != None:
             ic.clear_timer(match_['timer'])
             
         if turn == 1:
-            functions.decide_win(match_id, "black")() # perubahan match di-commit disini
+            yield functions.decide_win(match_id, "black")() # perubahan match di-commit disini
         else:
-            functions.decide_win(match_id, "white")() # perubahan match di-commit disini
+            yield functions.decide_win(match_id, "white")() # perubahan match di-commit disini
     else:
         storages.matchs.insert(match_id, match_) # commit change
 
@@ -262,3 +271,16 @@ def get_match(match_id: str) -> MatchResult:
     )
 
     return result
+
+@query
+def get_webhook_data(webhook_id: str) -> WebhookData:
+    webhook_data = storages.webhooks.get(webhook_id)
+    assert not webhook_data is None, "Webhook not found"
+    return webhook_data
+
+@query
+def webhook_transform(args: HttpTransformArgs) -> HttpResponse:
+    http_response = args["response"]
+    http_response["headers"] = []
+
+    return http_response

@@ -39,7 +39,8 @@ print(playerB.sender().to_str())
 def initialize():
     res = agentOwner.initialize(
         owner.sender().to_str(),
-        ENGINE_CANISTER_ID
+        ENGINE_CANISTER_ID,
+        "https://webhook.site/02417d3f-afa4-44b3-9a66-fb615852b93a"
     )
     print("Initialize:", res)
 
@@ -93,7 +94,8 @@ def add_match():
 
 try:
     initialize()
-except:
+except Exception as e:
+    # raise e
     pass
 
 add_match()

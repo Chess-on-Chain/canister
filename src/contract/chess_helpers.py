@@ -1,8 +1,11 @@
 import pickle
+import json
 
 import chess_storages as storages
 import chess_types
-from kybra import Principal, Vec, ic, void
+import chess_helpers
+from kybra import CallResult, Principal, Vec, ic, void, blob
+from kybra.canisters.management import HttpResponse, management_canister
 
 User = chess_types.User
 Match = chess_types.Match
@@ -31,6 +34,19 @@ def get_owner() -> Principal:
     _owner = owner
     return owner
 
+def change_webhook_url(new_webhook_url: str):
+    storages.stable.insert("webhook_url", new_webhook_url.encode('utf-8'))
+
+
+def get_webhook_url() -> str | None:
+    webhook_url = storages.stable.get("webhook_url")
+
+    if webhook_url is None:
+        return None
+
+    return webhook_url.decode('utf-8')
+
+
 def inject_history(match_id: str):
     """ini dieksekusi setelah pertandingan selesai"""
 
@@ -43,7 +59,8 @@ def inject_history(match_id: str):
 
         storages.histories.insert(principal, histories)
 
-def decide_win(match_id: str, pawn: str) -> void:
+
+def decide_win(match_id: str, pawn: str):
     """putuskan pemenang"""
     def inner():
         match_ = storages.matchs.get(match_id)
@@ -93,7 +110,42 @@ def decide_win(match_id: str, pawn: str) -> void:
         if storages.active_matchs.get(black_player_id.to_str()):
             del storages.active_matchs[black_player_id.to_str()]
 
+        winner_player = 'draw'
+
+        if match_['winner'] == 'white':
+            winner_player = white_player_id.to_str()
+        elif match_['winner'] == 'black':
+            winner_player = black_player_id.to_str()
+
+        webhook_url = chess_helpers.get_webhook_url()
+        random_bytes: CallResult[blob] = yield management_canister.raw_rand()
+        webhook_id = random_bytes.Ok.hex()
+
+        storages.webhooks[webhook_id] = {
+            'webhook_id': webhook_id,
+            'match_id': match_id,
+            'white_player': white_player_id.to_str(),
+            'black_player': black_player_id.to_str(),
+            'winner': match_['winner'],
+            'winner_player': winner_player,
+        }
+
+        http_result: CallResult[HttpResponse] = yield management_canister.http_request(
+            {
+                "url": webhook_url,
+                "max_response_bytes": 1_000,
+                "method": {"post": None},
+                "headers": [],
+                "body": json.dumps({'webhook_id': webhook_id}).encode('utf-8'),
+                "transform": {"function": (ic.id(), "webhook_transform"), "context": bytes()},
+            }
+        ).with_cycles(70_000_000)
+
+        if http_result.Err:
+            ic.print("failed webhook to: %s message: %s" % (webhook_url, http_result.Err))
+
     return inner
+
 
 def get_or_create_user(principal: Principal) -> User:
     assert principal != Principal(), "Zero address"
