@@ -103,6 +103,12 @@ def decide_win(match_id: str, pawn: str):
         storages.matchs.insert(match_['id'], match_)
 
         inject_history(match_['id'])
+        
+        if storages.active_matchs.get(white_player_id.to_str()):
+            del storages.active_matchs[white_player_id.to_str()]
+
+        if storages.active_matchs.get(black_player_id.to_str()):
+            del storages.active_matchs[black_player_id.to_str()]
 
         winner_player = 'draw'
 

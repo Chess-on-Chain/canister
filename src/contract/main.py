@@ -1,4 +1,3 @@
-import os
 import random
 
 import chess_constant
@@ -13,7 +12,6 @@ from kybra.canisters.management import HttpResponse, HttpTransformArgs
 
 # import re
 
-
 Principal = chess_types.Principal
 User = chess_types.User
 Match = chess_types.Match
@@ -27,6 +25,8 @@ TIMEOUT_DURATION = chess_constant.TIMEOUT_DURATION
 
 get_engine = chess_engine.get_engine
 only_owner = decorators.only_owner
+
+random.seed(ic.time())
 
 @update
 def initialize(_owner: Principal, engine: Principal, webhook_url: str) -> void:
@@ -133,8 +133,25 @@ def unban(principal: Principal) -> void:
 
 
 @update
+def resign() -> void:
+    caller = ic.caller()
+    active_match = storages.active_matchs.get(caller.to_str())
+
+    assert not active_match is None
+
+    match_id, caller_pawn = active_match
+
+    functions.decide_win(match_id, 'white' if caller_pawn == 'black' else 'black')()
+
+
+@update
 @only_owner
 def add_match(principalA: Principal, principalB: Principal) -> Tuple[str, Match]:
+    match_id = random.randbytes(12).hex()
+
+    assert not storages.active_matchs.get(principalA.to_str()), "Player A is playing"
+    assert not storages.active_matchs.get(principalB.to_str()), "Player B is playing"
+
     # Bidak putih dan hitam di-random oleh system
     users_ = [
         functions.get_or_create_user(principalA),
@@ -145,7 +162,9 @@ def add_match(principalA: Principal, principalB: Principal) -> Tuple[str, Match]
 
     userA, userB = users_
 
-    match_id = os.urandom(12).hex()
+    # masukan ke heap memory pertandingan aktif
+    storages.active_matchs[userA['id'].to_str()] = (match_id, 'white')
+    storages.active_matchs[userB['id'].to_str()] = (match_id, 'black')
 
     match_ = Match(
         id = match_id,
@@ -167,10 +186,13 @@ def add_match(principalA: Principal, principalB: Principal) -> Tuple[str, Match]
 
     
 @update
-def add_match_move(match_id: str, move: nat16) -> Async[Match]:
+def add_match_move(match_id: str, move: nat16, promotion: str) -> Async[Match]:
+    # promotion: Opt[str] bermasalah di icp-py
     match_ = storages.matchs.get(match_id)
-
     caller = ic.caller()
+
+    if promotion == "0":
+        promotion = None
 
     assert match_ != None, "match not found"
     assert match_['winner'] == "ongoing", "match already closed"
@@ -189,10 +211,13 @@ def add_match_move(match_id: str, move: nat16) -> Async[Match]:
     from_pos = move // 1000 # ex: 8
     to_pos = move % 1000 # ex: 24
 
-    result_from_canister: CallResult[chess_types.NextMoveAndStatusOutput] = yield get_engine().next_move_and_status(
+    result_from_canister: CallResult[
+        chess_types.NextMoveAndStatusOutput
+    ] = yield get_engine().next_move_and_status(
         current_fen,
         from_pos,
-        to_pos
+        to_pos,
+        promotion
     )
     assert result_from_canister.Err == None, "error request to engine canister: %s" % result_from_canister.Err
 

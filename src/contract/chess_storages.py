@@ -5,7 +5,13 @@ Principal = chess_types.Principal
 User = chess_types.User
 Match = chess_types.Match
 
+
 webhooks = {}
+
+# menggunakan heap memory karena data ini tidak perlu di-persistance
+# data akan menjadi kosong ketika di-restart atau di-upgrade
+active_matchs: dict[str, tuple[str, str]] = {}
+
 
 matchs = StableBTreeMap[str, Match](memory_id = 0, max_key_size = 96, max_value_size = 1000)
 
