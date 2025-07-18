@@ -133,7 +133,7 @@ def unban(principal: Principal) -> void:
 
 
 @update
-def resign() -> void:
+def resign() -> Async[void]:
     caller = ic.caller()
     active_match = storages.active_matchs.get(caller.to_str())
 
@@ -141,7 +141,7 @@ def resign() -> void:
 
     match_id, caller_pawn = active_match
 
-    functions.decide_win(match_id, 'white' if caller_pawn == 'black' else 'black')()
+    yield functions.decide_win(match_id, 'white' if caller_pawn == 'black' else 'black')()
 
 
 @update
