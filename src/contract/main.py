@@ -157,7 +157,8 @@ def add_match(principalA: Principal, principalB: Principal) -> Tuple[str, Match]
 
     
 @update
-def add_match_move(match_id: str, move: nat16, promotion: Opt[str]) -> Async[Match]:
+def add_match_move(match_id: str, move: nat16, promotion: str) -> Async[Match]:
+    # promotion: Opt[str] bermasalah di icp-py
     match_ = storages.matchs.get(match_id)
     caller = ic.caller()
 

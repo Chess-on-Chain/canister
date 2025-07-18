@@ -2,7 +2,7 @@ import pickle
 
 import chess_storages
 import chess_types
-from kybra import Service, nat8, service_query, void, Opt
+from kybra import Opt, Service, nat8, service_query, void
 
 NextMoveAndStatusOutput = chess_types.NextMoveAndStatusOutput
 Principal = chess_types.Principal
