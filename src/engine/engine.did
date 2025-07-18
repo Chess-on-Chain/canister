@@ -4,6 +4,6 @@ type NextMoveAndStatus = record {
 };
 service : {
     "status": (text) -> (nat8) query;
-    "next_move": (text, nat8, nat8) -> (text) query;
-    "next_move_and_status": (text, nat8, nat8) -> (NextMoveAndStatus) query;
+    "next_move": (text, nat8, nat8, opt text) -> (text) query;
+    "next_move_and_status": (text, nat8, nat8, opt text) -> (NextMoveAndStatus) query;
 }
