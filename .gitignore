@@ -12,7 +12,7 @@ wheels/
 \.kybra
 
 canister_ids\.json
-
+src/declarations
 # Added by cargo
 
 /target

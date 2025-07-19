@@ -29,7 +29,7 @@ def get_engine() -> Chess:
     return engine
 
 
-def change_principal(principal: Principal) -> void:
+def change_engine(principal: Principal) -> void:
     global _chess
 
     chess = Chess(principal)
