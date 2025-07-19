@@ -6,10 +6,9 @@ User = chess_types.User
 Match = chess_types.Match
 
 
-webhooks = {}
-
 # menggunakan heap memory karena data ini tidak perlu di-persistance
 # data akan menjadi kosong ketika di-restart atau di-upgrade
+webhooks = {}
 active_matchs: dict[str, tuple[str, str]] = {}
 
 

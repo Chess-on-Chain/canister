@@ -34,7 +34,7 @@ def initialize(_owner: Principal, engine: Principal, webhook_url: str) -> void:
 
     assert not initialized, "Already initialized"
 
-    chess_engine.change_principal(engine)
+    chess_engine.change_engine(engine)
     functions.transfer_ownership(_owner)
 
     storages.stable.insert("initialized", bytes(True))
