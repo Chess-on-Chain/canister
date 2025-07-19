@@ -1,6 +1,6 @@
 import random
 
-import chess_constant
+import chess_constants
 import chess_decorators as decorators
 import chess_engine
 import chess_helpers as functions
@@ -20,8 +20,8 @@ MatchResultHistory = chess_types.MatchResultHistory
 WebhookData = chess_types.WebhookData
 
 
-INITIAL_FEN = chess_constant.INITIAL_FEN
-TIMEOUT_DURATION = chess_constant.TIMEOUT_DURATION
+INITIAL_FEN = chess_constants.INITIAL_FEN
+TIMEOUT_DURATION = chess_constants.TIMEOUT_DURATION
 
 get_engine = chess_engine.get_engine
 only_owner = decorators.only_owner

@@ -1,10 +1,10 @@
-import pickle
 import json
+import pickle
 
+import chess_helpers
 import chess_storages as storages
 import chess_types
-import chess_helpers
-from kybra import CallResult, Principal, Vec, ic, void, blob
+from kybra import CallResult, Principal, Vec, blob, ic, void
 from kybra.canisters.management import HttpResponse, management_canister
 
 User = chess_types.User
