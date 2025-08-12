@@ -1,0 +1,9 @@
+type NextMoveAndStatus = record {
+  fen: text;
+  status: nat8;
+};
+service : {
+    "status": (text) -> (nat8) query;
+    "next_move": (text, nat8, nat8, opt text) -> (text) query;
+    "next_move_and_status": (text, nat8, nat8, opt text) -> (NextMoveAndStatus) query;
+}

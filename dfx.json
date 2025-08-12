@@ -1,14 +1,20 @@
 {
   "canisters": {
-    "contract_backend": {
-      "main": "src/contract_backend/main.mo",
+    "contract": {
+      "main": "src/backend/main.mo",
+      "dependencies": ["chess_engine"],
       "type": "motoko"
+    },
+    "chess_engine": {
+      "candid": "src/chess_engine/service.did",
+      "package": "chess_engine",
+      "type": "rust"
     }
   },
   "defaults": {
     "build": {
       "args": "",
-      "packtool": ""
+      "packtool": "mops sources"
     }
   },
   "output_env_file": ".env",
