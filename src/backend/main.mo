@@ -155,7 +155,6 @@ persistent actor {
     let timer = Timer.setTimer<system>(
       COUNTDOWN_SECONDS,
       func() : async () {
-        Debug.print("HARDUH");
         let _ = release_match(id, "black");
       },
     );
@@ -195,6 +194,11 @@ persistent actor {
     owner := _owner;
     chess_engine_principal := _chess_engine_principal;
     initialized := true;
+  };
+
+  public shared ({ caller }) func change_initial_fen(new_initial_fen : Text) {
+    assert caller == owner;
+    initial_fen := new_initial_fen;
   };
 
   public shared ({ caller }) func invite_match(friend_principal : Principal) : async () {
@@ -296,15 +300,14 @@ persistent actor {
         #err(text);
       };
       case (?match, #ok(from_position_int, to_position_int), caller) {
-        Debug.print(match.winner);
         switch (match.is_white_turn, match.winner, caller == match.white_player, caller == match.black_player) {
           case (_, "ongoing", false, false) {
             return #err("Forbidden");
           };
-          case (false, "ongoing", true, _) {
+          case (true, "ongoing", false, _) {
             return #err("Forbidden");
           };
-          case (true, "ongoing", false, _) {
+          case (true, "ongoing", _, true) {
             return #err("Forbidden");
           };
           case (_, "ongoing", _, _) {};
@@ -331,7 +334,7 @@ persistent actor {
           winner = null;
         });
 
-        let status = result.status % 10;
+        let status = result.status;
         let turn = status / 10;
         let game_status = status % 10;
 

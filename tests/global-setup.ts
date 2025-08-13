@@ -5,7 +5,7 @@ let pic: PocketIcServer | undefined;
 
 beforeAll(async () => {
   pic = await PocketIcServer.start({
-    showCanisterLogs: true
+    showCanisterLogs: false
   });
   const url = pic.getUrl();
 

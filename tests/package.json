@@ -12,8 +12,8 @@
     "@types/bun": "latest"
   },
   "scripts": {
-    "pretest": "cp -rf ../src/declarations/contract declarations",
-    "test": "bun test --timeout 10000"
+    "pretest": "rm -rf declarations && cp -r ../src/declarations/contract declarations",
+    "test": "bun test"
   },
   "peerDependencies": {
     "typescript": "^5"
