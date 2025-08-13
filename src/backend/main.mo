@@ -1,4 +1,4 @@
-import Chess "canister:chess_engine";
+import Chess "lib/chess";
 import IcWebSocketCdk "mo:ic-websocket-cdk";
 import IcWebSocketCdkState "mo:ic-websocket-cdk/State";
 import IcWebSocketCdkTypes "mo:ic-websocket-cdk/Types";
@@ -16,6 +16,8 @@ import Random "mo:core/Random";
 import Nat64 "mo:base/Nat64";
 import Timer "mo:base/Timer";
 import Array "mo:base/Array";
+import Debug "mo:base/Debug";
+import Blob "mo:base/Blob";
 import Types "lib/types";
 import Helpers "lib/helpers";
 import Match "lib/match"
@@ -26,6 +28,11 @@ persistent actor {
   let matchs = Map.empty<Nat64, Types.Match>();
   var match_count : Nat64 = 1;
 
+  var initial_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  var owner = Principal.fromBlob(Blob.fromArray([]));
+  var initialized = false;
+  var chess_engine_principal = Principal.fromBlob(Blob.fromArray([]));
+
   transient let rooms = Map.empty<Principal, Bool>();
   transient let invite_rooms = Map.empty<Principal, Principal>();
   transient let on_match = Map.empty<Principal, Bool>();
@@ -34,10 +41,8 @@ persistent actor {
 
   transient let random = Random.crypto();
   transient let COUNTDOWN_SECONDS = #seconds 60;
-  transient let INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
   private func get_or_create_user(user_principal : Principal) : Types.User {
-    // users.exists(user_principal);
     let user = Map.get<Principal, Types.User>(users, Principal.compare, user_principal);
 
     switch (user) {
@@ -65,6 +70,7 @@ persistent actor {
 
   private func can_join_room(user_principal : Principal) : Bool {
     let user = get_or_create_user(user_principal);
+    let is_anonymous = Principal.isAnonymous(user_principal);
 
     let is_banned = user.is_banned;
 
@@ -86,10 +92,12 @@ persistent actor {
       };
     };
 
-    empty_room and not on_match_exists and not is_banned;
+    empty_room and not on_match_exists and not is_banned and not is_anonymous;
   };
 
   private func release_match(match_id : Nat64, winner : Text) : Result.Result<Types.Match, Text> {
+    Debug.print("RELEASE");
+
     let match = Map.get<Nat64, Types.Match>(matchs, Nat64.compare, match_id);
 
     switch (match) {
@@ -147,6 +155,7 @@ persistent actor {
     let timer = Timer.setTimer<system>(
       COUNTDOWN_SECONDS,
       func() : async () {
+        Debug.print("HARDUH");
         let _ = release_match(id, "black");
       },
     );
@@ -157,9 +166,9 @@ persistent actor {
       id = id;
       is_ranked = is_rank;
       is_white_turn = true;
-      fen = INITIAL_FEN;
+      fen = initial_fen;
       moves = [{
-        fen = INITIAL_FEN;
+        fen = initial_fen;
         time = now;
       }];
       time = now;
@@ -179,6 +188,13 @@ persistent actor {
     };
 
     #ok(match);
+  };
+
+  public func initialize(_owner : Principal, _chess_engine_principal : Principal) {
+    assert not initialized;
+    owner := _owner;
+    chess_engine_principal := _chess_engine_principal;
+    initialized := true;
   };
 
   public shared ({ caller }) func invite_match(friend_principal : Principal) : async () {
@@ -272,6 +288,7 @@ persistent actor {
     };
 
     let match_object = Match.Match(matchs, match_id);
+
     let now = Time.now();
 
     switch (match_object.get(), position, caller) {
@@ -279,23 +296,25 @@ persistent actor {
         #err(text);
       };
       case (?match, #ok(from_position_int, to_position_int), caller) {
-
-        switch (match.is_white_turn, caller == match.white_player, caller == match.black_player) {
-          case (_, false, false) {
+        Debug.print(match.winner);
+        switch (match.is_white_turn, match.winner, caller == match.white_player, caller == match.black_player) {
+          case (_, "ongoing", false, false) {
             return #err("Forbidden");
           };
-          case (false, true, _) {
+          case (false, "ongoing", true, _) {
             return #err("Forbidden");
           };
-          case (true, false, _) {
+          case (true, "ongoing", false, _) {
             return #err("Forbidden");
           };
+          case (_, "ongoing", _, _) {};
           case _ {
-
+            return #err("match finish");
           };
         };
 
         let result = await Chess.next_move_and_status(
+          chess_engine_principal,
           match.fen,
           from_position_int,
           to_position_int,
@@ -304,7 +323,7 @@ persistent actor {
 
         let moves = Array.append<Types.Move>(match.moves, [{ fen = match.fen; time = Nat64.fromIntWrap(now) }]);
 
-        let _ = match_object.update({
+        let updated_match = match_object.update({
           fen = ?result.fen;
           is_white_turn = ?(not match.is_white_turn);
           moves = ?moves;
@@ -327,7 +346,8 @@ persistent actor {
             release_match(match_id, "white");
           };
           case (_, _) {
-            #err("Unknown err");
+            // #err("Unknown err");
+            updated_match;
           };
         }
 
@@ -341,6 +361,10 @@ persistent actor {
 
   public shared ({ caller }) func cancel_match_room() : async () {
     Map.remove<Principal, Bool>(rooms, Principal.compare, caller);
+  };
+
+  public func ping() : async (Text) {
+    "PONG";
   };
 
   transient let params = IcWebSocketCdkTypes.WsInitParams(null, null);

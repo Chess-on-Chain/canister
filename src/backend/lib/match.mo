@@ -4,6 +4,7 @@ import Types "types";
 import Nat64 "mo:base/Nat64";
 import Option "mo:base/Option";
 import Result "mo:base/Result";
+import Debug "mo:base/Debug";
 
 module {
 
@@ -12,7 +13,7 @@ module {
     is_white_turn : ?Bool;
     winner : ?Text;
     timer : ?Timer.TimerId;
-    fen: ?Text;
+    fen : ?Text;
   };
 
   // type MapMatch = Map.Map<Nat64, Types.Match>;
@@ -31,6 +32,7 @@ module {
 
       switch (old_match) {
         case (?old_match) {
+          Debug.print("Update match id: " # Nat64.toText(old_match.id));
           let new_moves = Option.get<[Types.Move]>(new_match.moves, old_match.moves);
           let new_is_white_turn = Option.get<Bool>(new_match.is_white_turn, old_match.is_white_turn);
           let new_winner = Option.get<Text>(new_match.winner, old_match.winner);

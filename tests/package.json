@@ -1,0 +1,21 @@
+{
+  "name": "tests",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@dfinity/agent": "^3.2.0",
+    "@dfinity/candid": "^3.2.0",
+    "@dfinity/identity": "^3.2.0",
+    "@dfinity/pic": "^0.13.1",
+    "@dfinity/principal": "^3.2.0",
+    "@types/bun": "latest"
+  },
+  "scripts": {
+    "pretest": "cp -rf ../src/declarations/contract declarations",
+    "test": "bun test --timeout 10000"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
