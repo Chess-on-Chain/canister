@@ -1,4 +1,3 @@
-import Timer "mo:base/Timer";
 import Map "mo:core/Map";
 import Types "types";
 import Nat64 "mo:base/Nat64";
@@ -12,8 +11,8 @@ module {
     moves : ?[Types.Move];
     is_white_turn : ?Bool;
     winner : ?Text;
-    timer : ?Timer.TimerId;
     fen : ?Text;
+    last_move : ?Nat64;
   };
 
   // type MapMatch = Map.Map<Nat64, Types.Match>;
@@ -30,14 +29,17 @@ module {
     public func update(new_match : UpdatedMatch) : Result.Result<Types.Match, Text> {
       let old_match = get();
 
+      // let now = Nat64.fromIntWrap(Time.now());
+
       switch (old_match) {
         case (?old_match) {
           Debug.print("Update match id: " # Nat64.toText(old_match.id));
           let new_moves = Option.get<[Types.Move]>(new_match.moves, old_match.moves);
           let new_is_white_turn = Option.get<Bool>(new_match.is_white_turn, old_match.is_white_turn);
           let new_winner = Option.get<Text>(new_match.winner, old_match.winner);
-          let new_timer = Option.get<Timer.TimerId>(new_match.timer, old_match.timer);
+          // let new_timer = Option.get<Timer.TimerId>(new_match.timer, old_match.timer);
           let new_fen = Option.get<Text>(new_match.fen, old_match.fen);
+          let new_last_move = Option.get<Nat64>(new_match.last_move, old_match.last_move);
 
           let match : Types.Match = {
             id = old_match.id;
@@ -48,7 +50,7 @@ module {
             moves = new_moves;
             is_white_turn = new_is_white_turn;
             winner = new_winner;
-            timer = new_timer;
+            last_move = new_last_move;
             fen = new_fen;
           };
 

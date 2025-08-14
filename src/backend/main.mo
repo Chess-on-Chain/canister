@@ -12,20 +12,23 @@ import Principal "mo:base/Principal";
 import Result "mo:base/Result";
 import Bool "mo:base/Bool";
 import Time "mo:base/Time";
-import Random "mo:core/Random";
 import Nat64 "mo:base/Nat64";
 import Timer "mo:base/Timer";
 import Array "mo:base/Array";
 import Debug "mo:base/Debug";
 import Blob "mo:base/Blob";
+import Nat8 "mo:base/Nat8";
 import Types "lib/types";
 import Helpers "lib/helpers";
-import Match "lib/match"
+import Match "lib/match";
+import Random "lib/random";
+import User "lib/user";
 
 persistent actor {
   // STORAGES
   let users = Map.empty<Principal, Types.User>();
   let matchs = Map.empty<Nat64, Types.Match>();
+  var unfinished_matchs : [Nat64] = [];
   var match_count : Nat64 = 1;
 
   var initial_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -36,18 +39,47 @@ persistent actor {
   transient let rooms = Map.empty<Principal, Bool>();
   transient let invite_rooms = Map.empty<Principal, Principal>();
   transient let on_match = Map.empty<Principal, Bool>();
+  transient let TIMEOUT_MATCH_NANOSECONDS : Nat64 = 60000000000; // 60 seconds
 
   // ENDSTORAGES
 
-  transient let random = Random.crypto();
-  transient let COUNTDOWN_SECONDS = #seconds 60;
+  // cronjob dieksesui dibawah
+  private func cronjob() : async () {
+    Debug.print("CRONJOB EXECUTED!");
+    let now = Nat64.fromIntWrap(Time.now());
+
+    var new_unfinished_matchs : [Nat64] = [];
+
+    for (match_id in unfinished_matchs.vals()) {
+      let match = Match.Match(matchs, match_id).get();
+
+      switch (match) {
+        case (?match) {
+          let distance = now - match.last_move;
+
+          if (distance >= TIMEOUT_MATCH_NANOSECONDS) {
+            ignore release_match(match_id, if (match.is_white_turn) "black" else "white");
+          } else {
+            new_unfinished_matchs := Array.append(new_unfinished_matchs, [match_id]);
+            // masukan kembali ke antrian
+          };
+
+        };
+        case _ {};
+      };
+
+      if (Array.size(unfinished_matchs) != Array.size(new_unfinished_matchs)) {
+        unfinished_matchs := new_unfinished_matchs;
+      };
+    };
+  };
 
   private func get_or_create_user(user_principal : Principal) : Types.User {
     let user = Map.get<Principal, Types.User>(users, Principal.compare, user_principal);
 
     switch (user) {
       case null {
-        let new_user : Types.User = {
+        let user : Types.User = {
           id = user_principal;
           draw = 0;
           win = 0;
@@ -56,11 +88,13 @@ persistent actor {
           score = 300;
           is_banned = false;
           username = null;
+          country = null;
+          photo = null;
         };
 
-        Map.add<Principal, Types.User>(users, Principal.compare, user_principal, new_user);
+        User.insert(users, user_principal, user);
 
-        new_user;
+        user;
       };
       case (?user) {
         user;
@@ -96,21 +130,21 @@ persistent actor {
   };
 
   private func release_match(match_id : Nat64, winner : Text) : Result.Result<Types.Match, Text> {
-    Debug.print("RELEASE");
+    Debug.print("RELEASE: " # winner);
 
     let match = Map.get<Nat64, Types.Match>(matchs, Nat64.compare, match_id);
 
     switch (match) {
       case (?match) {
-        Timer.cancelTimer(match.timer);
+        // Timer.cancelTimer(match.timer);
 
         let new_match = Match.Match(matchs, match.id);
         let new_match_updated = new_match.update({
           moves = null;
           is_white_turn = null;
           winner = ?winner;
-          timer = null;
           fen = null;
+          last_move = null;
         });
 
         switch (new_match_updated) {
@@ -142,7 +176,9 @@ persistent actor {
     let id = match_count;
     match_count += 1;
 
-    let random_value = await* random.nat8();
+    let random_value = Random.random_nat8();
+
+    Debug.print("Random Value:" # Nat8.toText(random_value));
 
     var white_player = player_a;
     var black_player = player_b;
@@ -151,13 +187,6 @@ persistent actor {
       white_player := player_b;
       black_player := player_a;
     };
-
-    let timer = Timer.setTimer<system>(
-      COUNTDOWN_SECONDS,
-      func() : async () {
-        let _ = release_match(id, "black");
-      },
-    );
 
     let match : Types.Match = {
       white_player = white_player;
@@ -172,32 +201,37 @@ persistent actor {
       }];
       time = now;
       winner = "ongoing";
-      timer = timer;
+      // timer = timer;
+      last_move = now;
     };
 
-    let _ = Map.add<Nat64, Types.Match>(matchs, Nat64.compare, id, match);
+    Map.add<Nat64, Types.Match>(matchs, Nat64.compare, id, match);
 
     switch (Map.get<Principal, Bool>(on_match, Principal.compare, player_a)) {
       case null {
         Map.add<Principal, Bool>(on_match, Principal.compare, player_a, true);
       };
       case (_) {
-        let _ = Map.replace<Principal, Bool>(on_match, Principal.compare, player_a, true);
+        ignore Map.replace<Principal, Bool>(on_match, Principal.compare, player_a, true);
       };
     };
+    
+    unfinished_matchs := Array.append(unfinished_matchs, [id]);
 
     #ok(match);
   };
 
   public func initialize(_owner : Principal, _chess_engine_principal : Principal) {
     assert not initialized;
+    Debug.print("Init" # Principal.toText(_owner));
     owner := _owner;
     chess_engine_principal := _chess_engine_principal;
     initialized := true;
   };
 
   public shared ({ caller }) func change_initial_fen(new_initial_fen : Text) {
-    assert caller == owner;
+    assert Principal.equal(caller, owner) or Principal.toText(caller) == Principal.toText(owner);
+
     initial_fen := new_initial_fen;
   };
 
@@ -207,7 +241,7 @@ persistent actor {
         Map.add<Principal, Principal>(invite_rooms, Principal.compare, caller, friend_principal);
       };
       case (_) {
-        let _ = Map.replace<Principal, Principal>(invite_rooms, Principal.compare, caller, friend_principal);
+        ignore Map.replace<Principal, Principal>(invite_rooms, Principal.compare, caller, friend_principal);
       };
     };
   };
@@ -293,7 +327,7 @@ persistent actor {
 
     let match_object = Match.Match(matchs, match_id);
 
-    let now = Time.now();
+    let now = Nat64.fromIntWrap(Time.now());
 
     switch (match_object.get(), position, caller) {
       case (_, #err(text), _) {
@@ -324,14 +358,14 @@ persistent actor {
           promotion,
         );
 
-        let moves = Array.append<Types.Move>(match.moves, [{ fen = match.fen; time = Nat64.fromIntWrap(now) }]);
+        let moves = Array.append<Types.Move>(match.moves, [{ fen = match.fen; time = now }]);
 
         let updated_match = match_object.update({
           fen = ?result.fen;
           is_white_turn = ?(not match.is_white_turn);
           moves = ?moves;
-          timer = null;
           winner = null;
+          last_move = ?now;
         });
 
         let status = result.status;
@@ -366,8 +400,39 @@ persistent actor {
     Map.remove<Principal, Bool>(rooms, Principal.compare, caller);
   };
 
-  public func ping() : async (Text) {
-    "PONG";
+  public query func get_match(match_id : Nat64) : async (Result.Result<Types.MatchResult, Text>) {
+    let match = Match.Match(matchs, match_id).get();
+
+    switch (match) {
+      case (?match) {
+        let white_player_user = User.User(users, match.white_player).get();
+        let black_player_user = User.User(users, match.black_player).get();
+
+        switch (white_player_user, black_player_user) {
+          case (?white_player_user, ?black_player_user) {
+
+            let result : Types.MatchResult = {
+              white_player = white_player_user;
+              black_player = black_player_user;
+              id = match.id;
+              moves = match.moves;
+              time = match.time;
+              winner = match.winner;
+              is_ranked = match.is_ranked;
+            };
+            #ok(result);
+
+          };
+          case _ {
+            #err("user not found");
+          };
+        };
+
+      };
+      case null {
+        #err("Not found");
+      };
+    };
   };
 
   transient let params = IcWebSocketCdkTypes.WsInitParams(null, null);
@@ -399,4 +464,6 @@ persistent actor {
   public shared query ({ caller }) func ws_get_messages(args : IcWebSocketCdk.CanisterWsGetMessagesArguments) : async IcWebSocketCdk.CanisterWsGetMessagesResult {
     ws.ws_get_messages(caller, args);
   };
+
+  ignore Timer.recurringTimer<system>(#seconds 10, cronjob) // eksekusi cronjob;
 };

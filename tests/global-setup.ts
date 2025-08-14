@@ -1,11 +1,11 @@
-import { beforeAll, afterAll } from 'bun:test';
-import { PocketIcServer } from '@dfinity/pic';
+import { beforeAll, afterAll } from "bun:test";
+import { PocketIcServer } from "@dfinity/pic";
 
 let pic: PocketIcServer | undefined;
 
 beforeAll(async () => {
   pic = await PocketIcServer.start({
-    showCanisterLogs: false
+    showCanisterLogs: process.env["SHOW_CANISTER_LOGS"] === "true",
   });
   const url = pic.getUrl();
 

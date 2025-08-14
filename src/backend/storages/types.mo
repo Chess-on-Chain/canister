@@ -1,3 +1,0 @@
-module {
-    public type Kasep = {}
-}

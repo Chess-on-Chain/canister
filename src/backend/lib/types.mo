@@ -1,8 +1,6 @@
-import Nat32 "mo:base/Nat32";
 import Nat64 "mo:base/Nat64";
 import Principal "mo:base/Principal";
-import Timer "mo:base/Timer";
-
+import Blob "mo:base/Blob";
 
 module {
   public type Move = {
@@ -14,33 +12,41 @@ module {
   //   status : Nat8;
   // };
 
+  public type File = {
+    filename : Text;
+    data : Blob;
+    hash : Blob;
+  };
+
   public type User = {
     id : Principal;
-    win : Nat32;
-    lost : Nat32;
-    draw : Nat32;
+    win : Nat16;
+    lost : Nat16;
+    draw : Nat16;
     username : ?Text;
     fullname : Text;
     score : Nat16;
     is_banned : Bool;
+    country : ?Text;
+    photo : ?File;
   };
 
   public type Match = {
     id : Nat64;
     white_player : Principal;
     black_player : Principal;
-    fen: Text;
+    fen : Text;
     moves : [Move];
     is_white_turn : Bool;
     winner : Text; // Could use variant for 'white', 'black', etc.
     is_ranked : Bool;
     time : Nat64;
-    timer: Timer.TimerId;
+    last_move : Nat64;
   };
 
   public type MatchCreated = {
-    #match: Match;
-    #text: Text;
+    #match : Match;
+    #text : Text;
   };
 
   public type MatchResult = {

@@ -1,6 +1,6 @@
 import { resolve } from "path";
 import { idlFactory } from "../declarations";
-import { beforeEach, describe, it, expect } from "bun:test";
+import { beforeEach, describe, it, expect, afterEach } from "bun:test";
 import type { _SERVICE } from "../declarations/contract.did";
 import {
   createIdentity,
@@ -34,16 +34,17 @@ export const WASM_CHESS_ENGINE_PATH = resolve(
 describe("Test chess game", () => {
   let pic: TypePocketIC;
   let actor: Actor<_SERVICE>;
+  // let chessEngineCanister: Principal | undefined;
 
   beforeEach(async () => {
     const identityOwner = createIdentity("Owner");
 
     // create a new PocketIC instance
     pic = await PocketIc.create(process.env.PIC_URL);
-    const chess_engine_canister = await pic.createCanister();
+    const chessEngineCanister = await pic.createCanister();
 
     await pic.installCode({
-      canisterId: chess_engine_canister,
+      canisterId: chessEngineCanister,
       wasm: WASM_CHESS_ENGINE_PATH,
     });
 
@@ -56,13 +57,19 @@ describe("Test chess game", () => {
     // Save the actor and canister ID for use in tests
     actor = fixture.actor;
 
-    actor.initialize(identityOwner.getPrincipal(), chess_engine_canister);
+    actor.initialize(identityOwner.getPrincipal(), chessEngineCanister);
+
+    await pic.tick(2);
   });
 
-  // afterEach(async () => {
-  //   // tear down the PocketIC instance
-  //   await pic.tearDown();
-  // });
+  afterEach(async () => {
+    // const identityOwner = createIdentity("Owner");
+    // chessEngineCanister &&
+    //   pic.stopCanister({
+    //     canisterId: chessEngineCanister,
+    //     sender: identityOwner.getPrincipal(),
+    //   });
+  });
 
   it("should in waiting room", async () => {
     const identity = createIdentity("0");
@@ -81,23 +88,6 @@ describe("Test chess game", () => {
         "Must waiting"
       ).toBe(true);
     }
-
-    // actor.setIdentity(identity2);
-    // const match = await actor.make_match(true);
-
-    // const now = new Date();
-    // const newTime = new Date(now.getTime() + 61 * 1000);
-    // await pic.setTime(newTime);
-
-    // await pic.tick();
-
-    // if ("ok" in match) {
-    //   if ("match" in match.ok) {
-    //     const id = match.ok.match.id;
-    //     actor.setIdentity(identity2);
-    //     console.log(await actor.make_move(id, "A2", "A4", []));
-    //   }
-    // }
   });
 
   it("should match created", async () => {
@@ -207,10 +197,15 @@ describe("Test chess game", () => {
         const match_id = match.ok.match.id;
 
         const whitePlayer =
-          match.ok.match.white_player == identityA.getPrincipal()
+          match.ok.match.white_player.toText() ==
+          identityA.getPrincipal().toText()
             ? identityA
             : identityB;
-        const blackPlayer = whitePlayer == identityA ? identityB : identityA;
+        const blackPlayer =
+          whitePlayer.getPrincipal().toText() ==
+          identityA.getPrincipal().toText()
+            ? identityB
+            : identityA;
 
         let i = 0;
 
@@ -238,6 +233,137 @@ describe("Test chess game", () => {
               expect(match_updated.ok.winner).toBe("white");
             }
           }
+        }
+      }
+    }
+  });
+
+  it("should black player win", async () => {
+    const identityOwner = createIdentity("Owner");
+    const identityA = createIdentity("A");
+    const identityB = createIdentity("B");
+
+    actor.setIdentity(identityOwner);
+    await actor.change_initial_fen("1r6/8/8/8/8/8/2k5/K7 w - - 0 1");
+
+    actor.setIdentity(identityA);
+    await actor.make_match(false);
+
+    actor.setIdentity(identityB);
+    const match = await actor.make_match(false);
+
+    expect("ok" in match && "match" in match.ok, "Match must created");
+
+    if ("ok" in match) {
+      if ("match" in match.ok) {
+        const whitePlayer =
+          match.ok.match.white_player.toText() ==
+          identityA.getPrincipal().toText()
+            ? identityA
+            : identityB;
+        const blackPlayer =
+          whitePlayer.getPrincipal().toText() ==
+          identityA.getPrincipal().toText()
+            ? identityB
+            : identityA;
+
+        actor.setIdentity(whitePlayer);
+        await actor.make_move(match.ok.match.id, "A1", "A2", []);
+
+        actor.setIdentity(blackPlayer);
+        const result_match = await actor.make_move(
+          match.ok.match.id,
+          "B8",
+          "A8",
+          []
+        );
+
+        expect(
+          "ok" in result_match && result_match.ok.winner,
+          "Must black win"
+        ).toBe("black");
+      }
+    }
+  });
+
+  it("should stalemate", async () => {
+    const identityOwner = createIdentity("Owner");
+    const identityA = createIdentity("A");
+    const identityB = createIdentity("B");
+
+    actor.setIdentity(identityOwner);
+    await actor.change_initial_fen("8/8/7k/8/p7/3pp3/2bK4/8 w - - 0 1");
+
+    actor.setIdentity(identityA);
+    await actor.make_match(true);
+
+    actor.setIdentity(identityB);
+    const match = await actor.make_match(true);
+
+    expect("ok" in match && "match" in match.ok, "Match must created");
+
+    if ("ok" in match) {
+      if ("match" in match.ok) {
+        const whitePlayer =
+          match.ok.match.white_player.toText() ==
+          identityA.getPrincipal().toText()
+            ? identityA
+            : identityB;
+        const blackPlayer =
+          whitePlayer.getPrincipal().toText() ==
+          identityA.getPrincipal().toText()
+            ? identityB
+            : identityA;
+
+        actor.setIdentity(whitePlayer);
+        await actor.make_move(match.ok.match.id, "D2", "C1", []);
+
+        actor.setIdentity(blackPlayer);
+        const result_match = await actor.make_move(
+          match.ok.match.id,
+          "A4",
+          "A3",
+          []
+        );
+
+        expect(
+          "ok" in result_match && result_match.ok.winner,
+          "Must stalemate"
+        ).toBe("draw");
+      }
+    }
+  });
+
+  it("should match timeout", async () => {
+    const identityA = createIdentity("A");
+    const identityB = createIdentity("B");
+
+    actor.setIdentity(identityA);
+    await actor.make_match(true);
+
+    actor.setIdentity(identityB);
+    const match = await actor.make_match(true);
+
+    expect("ok" in match, "Must ok").toBe(true);
+
+    if ("ok" in match) {
+      expect("match" in match.ok, "Must match exists").toBe(true);
+
+      if ("match" in match.ok) {
+        const match_data = match.ok.match;
+        expect(match_data.fen, "Must exact fen").toBe(
+          "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        );
+
+        const newDate = new Date(Date.now() + 61 * 1000);
+        await pic.setTime(newDate);
+        await pic.tick();
+        const match_result = await actor.get_match(match_data.id);
+
+        expect("ok" in match_result, "Must ok").toBe(true);
+
+        if ("ok" in match_result) {
+          expect(match_result.ok.winner, "Black must win").toBe("black");
         }
       }
     }
