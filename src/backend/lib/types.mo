@@ -8,10 +8,6 @@ module {
     time : Nat64;
   };
 
-  // public type NextMoveAndStatusOutput = {
-  //   status : Nat8;
-  // };
-
   public type File = {
     filename : Text;
     data : Blob;
@@ -69,13 +65,9 @@ module {
     time : Nat64;
   };
 
-  // public type WebhookData = {
-  //   webhook_id : Text;
-  //   match_id : Text;
-  //   white_player : Text;
-  //   black_player : Text;
-  //   winner : Text;
-  //   winner_player : Text;
-  //   is_ranked : Bool;
-  // };
+  public type WebsocketMessageQueue = {
+    principal: Principal;
+    method: Text;
+    body: Text;
+  };
 };

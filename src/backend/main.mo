@@ -1,13 +1,6 @@
 import Chess "lib/chess";
-import IcWebSocketCdk "mo:ic-websocket-cdk";
-import IcWebSocketCdkState "mo:ic-websocket-cdk/State";
-import IcWebSocketCdkTypes "mo:ic-websocket-cdk/Types";
 import Map "mo:core/Map";
-// import Debug "mo:base/Debug";
-// import Nat "mo:base/Nat";
-// import Text "mo:base/Text";
-// import Debug "mo:base/Debug";
-import Pubsub "lib/pubsub";
+import Message "lib/message";
 import Principal "mo:base/Principal";
 import Result "mo:base/Result";
 import Bool "mo:base/Bool";
@@ -18,6 +11,8 @@ import Array "mo:base/Array";
 import Debug "mo:base/Debug";
 import Blob "mo:base/Blob";
 import Nat8 "mo:base/Nat8";
+import Buffer "mo:base/Buffer";
+import Nat16 "mo:base/Nat16";
 import Types "lib/types";
 import Helpers "lib/helpers";
 import Match "lib/match";
@@ -36,6 +31,7 @@ persistent actor {
   var initialized = false;
   var chess_engine_principal = Principal.fromBlob(Blob.fromArray([]));
 
+  transient let messages = Buffer.Buffer<Types.WebsocketMessageQueue>(0);
   transient let rooms = Map.empty<Principal, Bool>();
   transient let invite_rooms = Map.empty<Principal, Principal>();
   transient let on_match = Map.empty<Principal, Bool>();
@@ -129,17 +125,15 @@ persistent actor {
     empty_room and not on_match_exists and not is_banned and not is_anonymous;
   };
 
-  private func release_match(match_id : Nat64, winner : Text) : Result.Result<Types.Match, Text> {
+  private func release_match(match_id : Nat64, winner : Text) : Types.Match {
     Debug.print("RELEASE: " # winner);
 
-    let match = Map.get<Nat64, Types.Match>(matchs, Nat64.compare, match_id);
+    // let match = Map.get<Nat64, Types.Match>(matchs, Nat64.compare, match_id);
+    let match_object = Match.Match(matchs, match_id);
 
-    switch (match) {
+    switch (match_object.get()) {
       case (?match) {
-        // Timer.cancelTimer(match.timer);
-
-        let new_match = Match.Match(matchs, match.id);
-        let new_match_updated = new_match.update({
+        let new_match = match_object.update({
           moves = null;
           is_white_turn = null;
           winner = ?winner;
@@ -147,18 +141,86 @@ persistent actor {
           last_move = null;
         });
 
-        switch (new_match_updated) {
-          case (#ok(new_match_updated)) {
-            #ok(new_match_updated);
+        let white_player_object = User.User(users, match.white_player);
+        let black_player_object = User.User(users, match.black_player);
+
+        switch (new_match, white_player_object.get(), black_player_object.get()) {
+          case (#ok(new_match), ?_white_player, ?_black_player) {
+            let white_player_data = {
+              var incr_win : Nat16 = 0;
+              var incr_lost : Nat16 = 0;
+              var incr_draw : Nat16 = 0;
+              var score = null;
+            };
+
+            let black_player_data = {
+              var incr_win : Nat16 = 0;
+              var incr_lost : Nat16 = 0;
+              var incr_draw : Nat16 = 0;
+              var score = null;
+            };
+
+            if (match.is_ranked) {
+              if (winner == "white") {
+                white_player_data.incr_win := 1;
+                black_player_data.incr_lost := 1;
+              } else if (winner == "black") {
+                white_player_data.incr_lost := 1;
+                black_player_data.incr_win := 1;
+              } else if (winner == "draw") {
+                white_player_data.incr_draw := 1;
+                black_player_data.incr_draw := 1;
+              };
+            };
+
+
+
+            let white_player_updated = white_player_object.update({
+              username = null;
+              country = null;
+              fullname = null;
+              photo = null;
+              is_banned = null;
+              incr_win = white_player_data.incr_win;
+              incr_lost = white_player_data.incr_lost;
+              incr_draw = white_player_data.incr_draw;
+              score = white_player_data.score;
+            });
+            let black_player_updated = black_player_object.update({
+              username = null;
+              country = null;
+              fullname = null;
+              photo = null;
+              is_banned = null;
+              incr_win = black_player_data.incr_win;
+              incr_lost = black_player_data.incr_lost;
+              incr_draw = black_player_data.incr_draw;
+              score = black_player_data.score;
+            });
+
+   
+
+            switch (white_player_updated, black_player_updated) {
+              case (#err(white_player_err), #err(black_player_err)) {
+                Debug.trap("ERROR: " # white_player_err # " : " # black_player_err);
+              };
+              case _ {
+                new_match;
+              };
+            };
+
           };
-          case (#err(text)) {
-            #err(text);
+          case (#err(text), _, _) {
+            Debug.trap("Release error " # text);
+          };
+          case (#ok(new_match), _, _) {
+            Debug.trap("Release error");
           };
         };
 
       };
-      case _ {
-        #err("Match not found");
+      case null {
+        Debug.trap("Release error: match not found");
       };
     }
 
@@ -215,7 +277,7 @@ persistent actor {
         ignore Map.replace<Principal, Bool>(on_match, Principal.compare, player_a, true);
       };
     };
-    
+
     unfinished_matchs := Array.append(unfinished_matchs, [id]);
 
     #ok(match);
@@ -312,7 +374,7 @@ persistent actor {
     return #ok(#text("Waiting opponent..."));
   };
 
-  public shared ({ caller }) func make_move(match_id : Nat64, from_position : Text, to_position : Text, promotion : ?Text) : async Result.Result<Types.Match, Text> {
+  private func _make_move(player : Principal, match_id : Nat64, from_position : Text, to_position : Text, promotion : ?Text) : async Result.Result<Types.Match, Text> {
     let position = switch (Helpers.translate_move(from_position), Helpers.translate_move(to_position)) {
       case (#ok(from_position_int), #ok(to_position_int)) {
         #ok(from_position_int, to_position_int);
@@ -326,15 +388,14 @@ persistent actor {
     };
 
     let match_object = Match.Match(matchs, match_id);
-
     let now = Nat64.fromIntWrap(Time.now());
 
-    switch (match_object.get(), position, caller) {
+    switch (match_object.get(), position, player) {
       case (_, #err(text), _) {
         #err(text);
       };
-      case (?match, #ok(from_position_int, to_position_int), caller) {
-        switch (match.is_white_turn, match.winner, caller == match.white_player, caller == match.black_player) {
+      case (?match, #ok(from_position_int, to_position_int), player) {
+        switch (match.is_white_turn, match.winner, player == match.white_player, player == match.black_player) {
           case (_, "ongoing", false, false) {
             return #err("Forbidden");
           };
@@ -374,13 +435,13 @@ persistent actor {
 
         switch (game_status, turn) {
           case (1, _) {
-            release_match(match_id, "draw");
+            #ok(release_match(match_id, "draw"));
           };
           case (2, 1) {
-            release_match(match_id, "black");
+            #ok(release_match(match_id, "black"));
           };
           case (2, 2) {
-            release_match(match_id, "white");
+            #ok(release_match(match_id, "white"));
           };
           case (_, _) {
             // #err("Unknown err");
@@ -394,6 +455,10 @@ persistent actor {
       };
     }
 
+  };
+
+  public shared ({ caller }) func make_move(match_id : Nat64, from_position : Text, to_position : Text, promotion : ?Text) : async Result.Result<Types.Match, Text> {
+    await _make_move(caller, match_id, from_position, to_position, promotion);
   };
 
   public shared ({ caller }) func cancel_match_room() : async () {
@@ -435,34 +500,8 @@ persistent actor {
     };
   };
 
-  transient let params = IcWebSocketCdkTypes.WsInitParams(null, null);
-  transient let ws_state = IcWebSocketCdkState.IcWebSocketState(params);
-
-  transient let handlers = IcWebSocketCdkTypes.WsHandlers(
-    ?Pubsub.on_open,
-    ?Pubsub.on_message,
-    ?Pubsub.on_close,
-  );
-
-  transient let ws = IcWebSocketCdk.IcWebSocket(ws_state, params, handlers);
-
-  public shared ({ caller }) func ws_open(args : IcWebSocketCdk.CanisterWsOpenArguments) : async IcWebSocketCdk.CanisterWsOpenResult {
-    await ws.ws_open(caller, args);
-  };
-
-  // method called by the Ws Gateway when closing the IcWebSocket connection
-  public shared ({ caller }) func ws_close(args : IcWebSocketCdk.CanisterWsCloseArguments) : async IcWebSocketCdk.CanisterWsCloseResult {
-    await ws.ws_close(caller, args);
-  };
-
-  // // method called by the frontend SDK to send a message to the canister
-  // public shared ({ caller }) func ws_message(args : IcWebSocketCdk.CanisterWsMessageArguments, msg : ?AppMessage) : async IcWebSocketCdk.CanisterWsMessageResult {
-  //   await ws.ws_message(caller, args, msg);
-  // };
-
-  // method called by the WS Gateway to get messages for all the clients it serves
-  public shared query ({ caller }) func ws_get_messages(args : IcWebSocketCdk.CanisterWsGetMessagesArguments) : async IcWebSocketCdk.CanisterWsGetMessagesResult {
-    ws.ws_get_messages(caller, args);
+  public query func get_messages() : async ([Types.WebsocketMessageQueue]) {
+    Message.get_messages(messages);
   };
 
   ignore Timer.recurringTimer<system>(#seconds 10, cronjob) // eksekusi cronjob;

@@ -59,7 +59,7 @@ describe("Test chess game", () => {
 
     actor.initialize(identityOwner.getPrincipal(), chessEngineCanister);
 
-    await pic.tick(2);
+    await pic.tick();
   });
 
   afterEach(async () => {
@@ -72,7 +72,7 @@ describe("Test chess game", () => {
   });
 
   it("should in waiting room", async () => {
-    const identity = createIdentity("0");
+    const identity = createIdentity("A");
 
     actor.setIdentity(identity);
 
@@ -364,6 +364,13 @@ describe("Test chess game", () => {
 
         if ("ok" in match_result) {
           expect(match_result.ok.winner, "Black must win").toBe("black");
+          expect(match_result.ok.white_player.lost).toBe(1);
+          expect(match_result.ok.white_player.draw).toBe(0);
+          expect(match_result.ok.white_player.win).toBe(0);
+
+          expect(match_result.ok.black_player.lost).toBe(0);
+          expect(match_result.ok.black_player.draw).toBe(0);
+          expect(match_result.ok.black_player.win).toBe(1);
         }
       }
     }

@@ -4,6 +4,7 @@ import Nat64 "mo:base/Nat64";
 import Option "mo:base/Option";
 import Result "mo:base/Result";
 import Debug "mo:base/Debug";
+// import User "user";
 
 module {
 
@@ -25,6 +26,19 @@ module {
     public func get() : ?Types.Match {
       Map.get<Nat64, Types.Match>(matchs, Nat64.compare, match_id);
     };
+
+    // public func get_white_player() : ?Types.User {
+    //   let match = get();
+
+    //   switch (match) {
+    //     case (?match) {
+    //       User.User(, match.white_player).get()
+    //     };
+    //     case null {
+    //       return null;
+    //     }
+    //   };
+    // };
 
     public func update(new_match : UpdatedMatch) : Result.Result<Types.Match, Text> {
       let old_match = get();
