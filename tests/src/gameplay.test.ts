@@ -1,12 +1,14 @@
 import { resolve } from "path";
+import { describe, it, expect, beforeEach } from "bun:test";
+import { type _SERVICE } from "../declarations/contract.did";
 import { idlFactory } from "../declarations";
-import { describe, it, expect } from "bun:test";
-import type { _SERVICE } from "../declarations/contract.did";
 import {
   createIdentity,
   PocketIc,
+  type Actor,
   type PocketIc as TypePocketIC,
 } from "@dfinity/pic";
+import type { Principal } from "@dfinity/principal";
 
 export const WASM_PATH = resolve(
   import.meta.dirname,
@@ -32,23 +34,30 @@ export const WASM_CHESS_ENGINE_PATH = resolve(
 
 describe("Test chess game", () => {
   let pic: TypePocketIC;
+  let chessEngineCanister: Principal;
 
-  const getActor = async () => {
-    const identityOwner = createIdentity("Owner");
+  beforeEach(async () => {
     pic = await PocketIc.create(process.env.PIC_URL);
-    const chessEngineCanister = await pic.createCanister();
-
+    chessEngineCanister = await pic.createCanister();
     await pic.installCode({
       canisterId: chessEngineCanister,
       wasm: WASM_CHESS_ENGINE_PATH,
     });
+  });
 
-    const fixture = await pic.setupCanister<_SERVICE>({
-      idlFactory,
+  const getActor = async () => {
+    const identityOwner = createIdentity("Owner");
+    const canister = await pic.createCanister();
+
+    await pic.installCode({
+      canisterId: canister,
       wasm: WASM_PATH,
     });
 
-    let actor = fixture.actor;
+    // let actor = createActor(canister)
+    let actor: Actor<_SERVICE> = pic.createActor(idlFactory, canister);
+
+    // let actor = fixture.actor;
 
     actor.initialize(identityOwner.getPrincipal(), chessEngineCanister);
     await pic.tick();
@@ -204,14 +213,16 @@ describe("Test chess game", () => {
             : identityA;
 
         let i = 0;
-
+        let is_white_turn = true;
         for (const move of moves) {
           i++;
-          if (match.ok.match.is_white_turn) {
+          if (is_white_turn) {
             actor.setIdentity(whitePlayer);
           } else {
             actor.setIdentity(blackPlayer);
           }
+
+          is_white_turn = !is_white_turn;
 
           const match_updated = await actor.make_move(
             match_id,
@@ -349,10 +360,11 @@ describe("Test chess game", () => {
 
     let i = 0;
     for (const must_win of ["white", "black"]) {
-      actor.setIdentity(identityA);
+      await pic.tick();
 
       const is_ranked = i == 0; // hanya permainan pertama yang ranked
 
+      actor.setIdentity(identityA);
       await actor.make_match(is_ranked);
 
       actor.setIdentity(identityB);
@@ -383,23 +395,107 @@ describe("Test chess game", () => {
           const match_result = await actor.get_match(match_data.id);
 
           expect("ok" in match_result, "Must ok").toBe(true);
-
           if ("ok" in match_result) {
             expect(match_result.ok.winner, `${must_win} must win`).toBe(
               must_win
             );
-            expect(match_result.ok.white_player.lost).toBe(0);
-            expect(match_result.ok.white_player.draw).toBe(0);
-            expect(match_result.ok.white_player.win).toBe(1);
 
-            expect(match_result.ok.black_player.lost).toBe(1);
-            expect(match_result.ok.black_player.draw).toBe(0);
-            expect(match_result.ok.black_player.win).toBe(0);
+            if (i == 0) {
+              expect(match_result.ok.white_player.lost).toBe(0);
+              expect(match_result.ok.white_player.draw).toBe(0);
+              expect(match_result.ok.white_player.win).toBe(1);
+
+              expect(match_result.ok.black_player.lost).toBe(1);
+              expect(match_result.ok.black_player.draw).toBe(0);
+              expect(match_result.ok.black_player.win).toBe(0);
+            }
           }
         }
       }
 
       i++;
     }
+  });
+
+  it("should promotion", async () => {
+    const actor = await getActor();
+
+    const identityOwner = createIdentity("Owner");
+    const identityA = createIdentity("A");
+    const identityB = createIdentity("B");
+
+    actor.setIdentity(identityOwner);
+    await actor.change_initial_fen("8/1PP4k/8/8/8/8/2K2pp1/8 w - - 0 1");
+
+    actor.setIdentity(identityA);
+    await actor.make_match(true);
+
+    actor.setIdentity(identityB);
+    const match = await actor.make_match(true);
+
+    expect("ok" in match && "match" in match.ok, "Match must created");
+
+    const moves = [
+      ["B7", "B8", "q", "1Q6/2P4k/8/8/8/8/2K2pp1/8 b - - 0 1"],
+      ["F2", "F1", "n", "1Q6/2P4k/8/8/8/8/2K3p1/5n2 w - - 0 1"],
+      ["C7", "C8", "b", "1QB5/7k/8/8/8/8/2K3p1/5n2 b - - 0 1"],
+      ["G2", "G1", "r", "1QB5/7k/8/8/8/8/2K5/5nr1 w - - 0 1"],
+    ];
+
+    if ("ok" in match) {
+      if ("match" in match.ok) {
+        const whitePlayer =
+          match.ok.match.white_player.toText() ==
+          identityA.getPrincipal().toText()
+            ? identityA
+            : identityB;
+        const blackPlayer =
+          whitePlayer.getPrincipal().toText() ==
+          identityA.getPrincipal().toText()
+            ? identityB
+            : identityA;
+
+        let is_white_turn = true;
+        for (const move of moves) {
+          if (is_white_turn) {
+            actor.setIdentity(whitePlayer);
+          } else {
+            actor.setIdentity(blackPlayer);
+          }
+
+          is_white_turn = !is_white_turn;
+
+          let current_match = await actor.make_move(
+            match.ok.match.id,
+            move[0],
+            move[1],
+            [move[2]]
+          );
+
+          expect("ok" in current_match).toBe(true);
+
+          if ("ok" in current_match) {
+            expect(current_match.ok.fen, `must promotion as ${move[2]}`).toBe(
+              move[3]
+            );
+          }
+        }
+      }
+    }
+  });
+
+  it("should username changed", async () => {
+    const actor = await getActor();
+    const identityA = createIdentity("A");
+
+    actor.setIdentity(identityA);
+    await actor.edit_user({
+      username: ["saliskasep"],
+      country: ["ID"],
+      fullname: ["salis the ganteng"],
+      photo: []
+    });
+
+    console.log(await actor.get_user(identityA.getPrincipal()))
   });
 });

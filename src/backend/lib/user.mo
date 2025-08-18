@@ -4,10 +4,20 @@ import Option "mo:base/Option";
 import Result "mo:base/Result";
 import Nat16 "mo:base/Nat16";
 import Principal "mo:base/Principal";
+import Text "mo:core/Text";
 
 module {
+  public type EditUser = {
+    username: ?Text;
+    fullname : ?Text;
+    country : ?Text;
+    photo : ?{
+      extension: Text;
+      data: Blob;
+    };
+  };
 
-  type UpdatedUser = {
+  public type UpdatedUser = {
     username : ?Text;
     fullname : ?Text;
     incr_win : Nat16;
@@ -19,13 +29,13 @@ module {
     photo : ?Types.File;
   };
 
-  public func insert(users : Map.Map<Principal, Types.User>, id : Principal, user : Types.User) {
-    Map.add<Principal, Types.User>(users, Principal.compare, id, user);
+  public func insert(users : Map.Map<Text, Types.User>, id : Principal, user : Types.User) {
+    Map.add<Text, Types.User>(users, Text.compare, Principal.toText(id), user);
   };
 
-  public class User(users : Map.Map<Principal, Types.User>, user_id : Principal) {
+  public class User(users : Map.Map<Text, Types.User>, user_id : Principal) {
     public func get() : ?Types.User {
-      Map.get<Principal, Types.User>(users, Principal.compare, user_id);
+      Map.get<Text, Types.User>(users, Text.compare, Principal.toText(user_id));
     };
 
     public func update(new_user : UpdatedUser) : Result.Result<Types.User, Text> {
@@ -56,7 +66,7 @@ module {
             photo = new_photo;
           };
 
-          ignore Map.replace<Principal, Types.User>(users, Principal.compare, user_id, user);
+          ignore Map.replace<Text, Types.User>(users, Text.compare, Principal.toText(user_id), user);
 
           #ok(user);
         };

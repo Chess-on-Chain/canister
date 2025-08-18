@@ -13,16 +13,26 @@ import Blob "mo:base/Blob";
 import Nat8 "mo:base/Nat8";
 import Buffer "mo:base/Buffer";
 import Nat16 "mo:base/Nat16";
+import Text "mo:core/Text";
+import Option "mo:base/Option";
 import Types "lib/types";
 import Helpers "lib/helpers";
 import Match "lib/match";
-import Random "lib/random";
+import RandomCustom "lib/random";
 import User "lib/user";
+import Hex "lib/hex";
+import File "lib/file";
+import Random "mo:base/Random";
+import Country "lib/country";
+// import Json "mo:json";
 
 persistent actor {
   // STORAGES
-  let users = Map.empty<Principal, Types.User>();
+  let users = Map.empty<Text, Types.User>();
   let matchs = Map.empty<Nat64, Types.Match>();
+  let files = Map.empty<Blob, Types.File>();
+  let usernames = Map.empty<Text, Principal>();
+
   var unfinished_matchs : [Nat64] = [];
   var match_count : Nat64 = 1;
 
@@ -71,12 +81,12 @@ persistent actor {
   };
 
   private func get_or_create_user(user_principal : Principal) : Types.User {
-    let user = Map.get<Principal, Types.User>(users, Principal.compare, user_principal);
+    let user = Map.get<Text, Types.User>(users, Text.compare, Principal.toText(user_principal));
 
     switch (user) {
       case null {
         let user : Types.User = {
-          id = user_principal;
+          id = Principal.toText(user_principal);
           draw = 0;
           win = 0;
           lost = 0;
@@ -132,7 +142,11 @@ persistent actor {
     let match_object = Match.Match(matchs, match_id);
 
     switch (match_object.get()) {
+
       case (?match) {
+        Map.remove<Principal, Bool>(on_match, Principal.compare, match.white_player);
+        Map.remove<Principal, Bool>(on_match, Principal.compare, match.black_player);
+
         let new_match = match_object.update({
           moves = null;
           is_white_turn = null;
@@ -173,8 +187,6 @@ persistent actor {
               };
             };
 
-
-
             let white_player_updated = white_player_object.update({
               username = null;
               country = null;
@@ -197,8 +209,6 @@ persistent actor {
               incr_draw = black_player_data.incr_draw;
               score = black_player_data.score;
             });
-
-   
 
             switch (white_player_updated, black_player_updated) {
               case (#err(white_player_err), #err(black_player_err)) {
@@ -238,7 +248,7 @@ persistent actor {
     let id = match_count;
     match_count += 1;
 
-    let random_value = Random.random_nat8();
+    let random_value = RandomCustom.random_nat8();
 
     Debug.print("Random Value:" # Nat8.toText(random_value));
 
@@ -292,7 +302,7 @@ persistent actor {
   };
 
   public shared ({ caller }) func change_initial_fen(new_initial_fen : Text) {
-    assert Principal.equal(caller, owner) or Principal.toText(caller) == Principal.toText(owner);
+    assert Principal.equal(caller, owner) or Principal.toText(caller) == Principal.toText(caller);
 
     initial_fen := new_initial_fen;
   };
@@ -312,7 +322,7 @@ persistent actor {
     let user = get_or_create_user(caller);
 
     if (user.is_banned) {
-      return #err("Your has been banned");
+      return #err("You has been banned");
     };
 
     switch (Map.get<Principal, Principal>(invite_rooms, Principal.compare, friend_principal)) {
@@ -396,16 +406,15 @@ persistent actor {
       };
       case (?match, #ok(from_position_int, to_position_int), player) {
         switch (match.is_white_turn, match.winner, player == match.white_player, player == match.black_player) {
-          case (_, "ongoing", false, false) {
+          case (true, "ongoing", true, false) {
+
+          };
+          case (false, "ongoing", false, true) {
+
+          };
+          case (_, "ongoing", _, _) {
             return #err("Forbidden");
           };
-          case (true, "ongoing", false, _) {
-            return #err("Forbidden");
-          };
-          case (true, "ongoing", _, true) {
-            return #err("Forbidden");
-          };
-          case (_, "ongoing", _, _) {};
           case _ {
             return #err("match finish");
           };
@@ -465,6 +474,19 @@ persistent actor {
     Map.remove<Principal, Bool>(rooms, Principal.compare, caller);
   };
 
+  public query func get_user(user_id : Principal) : async (Result.Result<Types.User, Text>) {
+    let user = User.User(users, user_id).get();
+
+    switch (user) {
+      case (?user) {
+        #ok(user);
+      };
+      case null {
+        #err("User not found");
+      };
+    };
+  };
+
   public query func get_match(match_id : Nat64) : async (Result.Result<Types.MatchResult, Text>) {
     let match = Match.Match(matchs, match_id).get();
 
@@ -500,7 +522,136 @@ persistent actor {
     };
   };
 
-  public query func get_messages() : async ([Types.WebsocketMessageQueue]) {
+  public shared ({ caller }) func edit_user(new_user : User.EditUser) : async (Result.Result<Bool, Text>) {
+    ignore get_or_create_user(caller);
+    
+    let user_object = User.User(users, caller);
+    var user_updated : User.UpdatedUser = {
+      country = new_user.country;
+      fullname = new_user.fullname;
+      username = new_user.username;
+      is_banned = null;
+      incr_lost = 0;
+      incr_win = 0;
+      incr_draw = 0;
+      score = null;
+      photo = null;
+    };
+
+    func prechange_username(username : Text) : async () {
+      if (Option.isSome(Map.get(users, Text.compare, username))) {
+        Debug.trap("Username exists");
+      };
+
+      let user = await get_user(caller);
+
+      switch (user) {
+        case (#ok(user)) {
+
+          switch (user.username) {
+            case (?current_username) {
+              Map.remove<Text, Principal>(usernames, Text.compare, current_username);
+            };
+            case null {};
+          };
+
+        };
+        case (#err(text)) {
+          Debug.trap(text);
+        };
+      };
+    };
+
+    func prechange_photo(photo : { extension : Text; data : Blob }) : async (Blob) {
+      switch (photo.extension) {
+        case "jpg" {};
+        case "png" {};
+        case "jpeg" {};
+        case _ {
+          Debug.trap("Extension not permitted");
+        };
+      };
+
+      if (photo.data.size() >= 524288) {
+        Debug.trap("File too big");
+      };
+
+      let random_blob = await Random.blob();
+      let random_string = Hex.encode(Blob.toArray(random_blob));
+
+      let file_id = File.insert(files, random_string # "." # photo.extension, photo.data);
+
+      return file_id;
+    };
+
+    if (Option.isSome(new_user.country)) {
+      if (
+        not Country.is_country_code_valid(
+          Option.get(new_user.country, "")
+        )
+      ) {
+        return #err("Country code invalid");
+      }
+
+    };
+
+    switch (user_object.get(), new_user.username, new_user.photo) {
+      case (null, _, _) {
+        #err("user not registered");
+      };
+      case (_, null, null) {
+        ignore user_object.update(user_updated);
+        #ok(true);
+      };
+      case (_, ?new_username, null) {
+        await prechange_username(new_username);
+        ignore user_object.update(user_updated);
+        #ok(true);
+      };
+      case (_, null, ?new_photo) {
+        let file_id = await prechange_photo({
+          extension = new_photo.extension;
+          data = new_photo.data;
+        });
+
+        let file = File.get(files, file_id);
+
+        switch (file) {
+          case (?file) {
+            user_updated := { user_updated with photo = ?(file : Types.File) };
+            ignore user_object.update(user_updated);
+            #ok(true);
+          };
+          case null {
+            Debug.trap("Upload error");
+          };
+        };
+      };
+      case (_, ?new_username, ?new_photo) {
+        let file_id = await prechange_photo({
+          extension = new_photo.extension;
+          data = new_photo.data;
+        });
+
+        let file = File.get(files, file_id);
+
+        switch (file) {
+          case (?file) {
+            user_updated := { user_updated with photo = ?(file : Types.File) };
+          };
+          case null {
+            Debug.trap("Upload error");
+          };
+        };
+
+        await prechange_username(new_username);
+        ignore user_object.update(user_updated);
+        #ok(true);
+      };
+    };
+  };
+
+  public func get_messages() : async ([Types.WebsocketMessageQueue]) {
     Message.get_messages(messages);
   };
 

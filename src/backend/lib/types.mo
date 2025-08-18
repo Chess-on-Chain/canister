@@ -1,6 +1,5 @@
 import Nat64 "mo:base/Nat64";
 import Principal "mo:base/Principal";
-import Blob "mo:base/Blob";
 
 module {
   public type Move = {
@@ -15,7 +14,7 @@ module {
   };
 
   public type User = {
-    id : Principal;
+    id : Text;
     win : Nat16;
     lost : Nat16;
     draw : Nat16;

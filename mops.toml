@@ -1,3 +1,5 @@
 [dependencies]
 base = "0.13.2"
 core = "0.5.0"
+json = "1.4.0"
+sha2 = "0.1.3"
