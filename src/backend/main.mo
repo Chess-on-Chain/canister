@@ -13,7 +13,7 @@ import Blob "mo:base/Blob";
 import Nat8 "mo:base/Nat8";
 import Buffer "mo:base/Buffer";
 import Nat16 "mo:base/Nat16";
-import Text "mo:core/Text";
+import Text "mo:base/Text";
 import Option "mo:base/Option";
 import Types "lib/types";
 import Helpers "lib/helpers";
@@ -23,6 +23,8 @@ import User "lib/user";
 import Hex "lib/hex";
 import File "lib/file";
 import Random "mo:base/Random";
+import Int "mo:base/Int";
+import CertifiedCache "mo:certified-cache";
 import Country "lib/country";
 // import Json "mo:json";
 
@@ -46,6 +48,7 @@ persistent actor {
   transient let invite_rooms = Map.empty<Principal, Principal>();
   transient let on_match = Map.empty<Principal, Bool>();
   transient let TIMEOUT_MATCH_NANOSECONDS : Nat64 = 60000000000; // 60 seconds
+  transient let CRONJOB_COUNTDOWN_SECONDS = #seconds 10;
 
   // ENDSTORAGES
 
@@ -159,22 +162,36 @@ persistent actor {
         let black_player_object = User.User(users, match.black_player);
 
         switch (new_match, white_player_object.get(), black_player_object.get()) {
-          case (#ok(new_match), ?_white_player, ?_black_player) {
+          case (#ok(new_match), ?white_player, ?black_player) {
+
+            let k_factor : Nat8 = 32;
+            var score_a = 0.5;
+            if (winner == "white") {
+              score_a := 1;
+            } else if (winner == "black") {
+              score_a := 0;
+            };
+
             let white_player_data = {
               var incr_win : Nat16 = 0;
               var incr_lost : Nat16 = 0;
               var incr_draw : Nat16 = 0;
-              var score = null;
+              var score : Nat16 = 0;
             };
 
             let black_player_data = {
               var incr_win : Nat16 = 0;
               var incr_lost : Nat16 = 0;
               var incr_draw : Nat16 = 0;
-              var score = null;
+              var score : Nat16 = 0;
             };
 
             if (match.is_ranked) {
+              let (white_player_new_elo, black_player_new_elo) = Helpers.update_elo(white_player.score, black_player.score, score_a, k_factor);
+
+              white_player_data.score := white_player_new_elo;
+              black_player_data.score := black_player_new_elo;
+
               if (winner == "white") {
                 white_player_data.incr_win := 1;
                 black_player_data.incr_lost := 1;
@@ -196,7 +213,7 @@ persistent actor {
               incr_win = white_player_data.incr_win;
               incr_lost = white_player_data.incr_lost;
               incr_draw = white_player_data.incr_draw;
-              score = white_player_data.score;
+              score = ?white_player_data.score;
             });
             let black_player_updated = black_player_object.update({
               username = null;
@@ -207,7 +224,7 @@ persistent actor {
               incr_win = black_player_data.incr_win;
               incr_lost = black_player_data.incr_lost;
               incr_draw = black_player_data.incr_draw;
-              score = black_player_data.score;
+              score = ?black_player_data.score;
             });
 
             switch (white_player_updated, black_player_updated) {
@@ -301,9 +318,12 @@ persistent actor {
     initialized := true;
   };
 
-  public shared ({ caller }) func change_initial_fen(new_initial_fen : Text) {
+  private func only_owner(caller : Principal) {
     assert Principal.equal(caller, owner) or Principal.toText(caller) == Principal.toText(caller);
+  };
 
+  public shared ({ caller }) func change_initial_fen(new_initial_fen : Text) {
+    only_owner(caller);
     initial_fen := new_initial_fen;
   };
 
@@ -524,7 +544,7 @@ persistent actor {
 
   public shared ({ caller }) func edit_user(new_user : User.EditUser) : async (Result.Result<Bool, Text>) {
     ignore get_or_create_user(caller);
-    
+
     let user_object = User.User(users, caller);
     var user_updated : User.UpdatedUser = {
       country = new_user.country;
@@ -651,9 +671,120 @@ persistent actor {
     };
   };
 
-  public func get_messages() : async ([Types.WebsocketMessageQueue]) {
-    Message.get_messages(messages);
+  public shared ({ caller }) func pop_messages() : async ([Types.WebsocketMessageQueue]) {
+    only_owner(caller);
+    Message.pop_messages(messages);
   };
 
-  ignore Timer.recurringTimer<system>(#seconds 10, cronjob) // eksekusi cronjob;
+  transient let cache_entries : [(Text, (Blob, Nat))] = [];
+  transient let two_days_in_nanos = 2 * 24 * 60 * 60 * 1000 * 1000 * 1000;
+  transient let cache = CertifiedCache.fromEntries<Text, Blob>(
+    cache_entries,
+    Text.equal,
+    Text.hash,
+    Text.encodeUtf8,
+    func(b : Blob) : Blob { b },
+    two_days_in_nanos + Int.abs(Time.now()),
+  );
+
+  public query func http_request(req : Types.Http.HttpRequest) : async (Types.Http.HttpResponse) {
+    let cached = cache.get(req.url);
+
+    switch cached {
+      case (?body) {
+
+        var response_body = "Heart Not Found" : Blob;
+        var status : Nat16 = 404;
+        var content_type = "text/plain";
+
+        if (Text.contains(req.url, #text "/image/")) {
+          let (filename, file_blob) = File.decode_file_with_name(body);
+
+          content_type := Option.get(File.get_mimetype_from_extension(filename), content_type);
+          response_body := file_blob;
+          status := 200;
+        };
+
+        Debug.print(Option.get(Text.decodeUtf8(response_body), "SSS"));
+        let response : Types.Http.HttpResponse = {
+          status_code = status;
+          headers = [("content-type", content_type), cache.certificationHeader(req.url)];
+          body = response_body;
+          streaming_strategy = null;
+          upgrade = null;
+        };
+
+        return response;
+      };
+      case null {
+        Debug.print("Request was not found in cache. Upgrading to update request.\n");
+        return {
+          status_code = 302;
+          headers = [];
+          body = Blob.fromArray([]);
+          streaming_strategy = null;
+          upgrade = ?true;
+        };
+      };
+    };
+  };
+
+  public func http_request_update(req : Types.Http.HttpRequest) : async (Types.Http.HttpResponse) {
+    Debug.print("Storing request in cache.");
+
+    var status : Nat16 = 404;
+    var body = "Heart Not Found" : Blob;
+    var saved_body = body;
+    var content_type = "text/plain";
+
+    if (Text.contains(req.url, #text "/image/")) {
+      let file_id_hex = Helpers.parse_image_file_id(req.url);
+
+      switch (file_id_hex) {
+        case (?file_id_hex) {
+          let file_id = Hex.decode(file_id_hex);
+
+          switch (file_id) {
+            case (?file_id) {
+              let file = File.get(files, file_id);
+
+              switch (file) {
+                case (?file) {
+                  saved_body := File.encode_file_with_name(
+                    file.filename,
+                    file.data,
+                  );
+                  body := file.data;
+                  content_type := Option.get(File.get_mimetype_from_extension(file.filename), content_type);
+                };
+                case null {
+
+                };
+              }
+
+            };
+            case null {};
+          }
+
+        };
+        case null {};
+      };
+    };
+
+    Debug.print(Option.get(Text.decodeUtf8(saved_body), "SSS"));
+
+    cache.put(req.url, body, null);
+
+    let response : Types.Http.HttpResponse = {
+      status_code = status;
+      headers = [("content-type", content_type)];
+      body = body;
+      streaming_strategy = null;
+      upgrade = null;
+    };
+
+    return response;
+  };
+
+  // ignore Timer.recurringTimer<system>(CRONJOB_COUNTDOWN_SECONDS, cronjob) // eksekusi cronjob;
 };

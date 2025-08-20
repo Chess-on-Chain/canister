@@ -35,6 +35,7 @@ export const WASM_CHESS_ENGINE_PATH = resolve(
 describe("Test chess game", () => {
   let pic: TypePocketIC;
   let chessEngineCanister: Principal;
+  let actor: Actor<_SERVICE>;
 
   beforeEach(async () => {
     pic = await PocketIc.create(process.env.PIC_URL);
@@ -43,9 +44,7 @@ describe("Test chess game", () => {
       canisterId: chessEngineCanister,
       wasm: WASM_CHESS_ENGINE_PATH,
     });
-  });
 
-  const getActor = async () => {
     const identityOwner = createIdentity("Owner");
     const canister = await pic.createCanister();
 
@@ -55,18 +54,18 @@ describe("Test chess game", () => {
     });
 
     // let actor = createActor(canister)
-    let actor: Actor<_SERVICE> = pic.createActor(idlFactory, canister);
+    actor = pic.createActor(idlFactory, canister);
 
     // let actor = fixture.actor;
 
     actor.initialize(identityOwner.getPrincipal(), chessEngineCanister);
     await pic.tick();
 
-    return actor;
-  };
+    // return actor;
+  });
 
   it("should in waiting room", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identity = createIdentity("A");
 
@@ -87,7 +86,7 @@ describe("Test chess game", () => {
   });
 
   it("should match created", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityA = createIdentity("A");
     const identityB = createIdentity("B");
@@ -113,7 +112,7 @@ describe("Test chess game", () => {
   });
 
   it("should can't make match", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityA = createIdentity("A");
     const identityB = createIdentity("B");
@@ -134,7 +133,7 @@ describe("Test chess game", () => {
   });
 
   it("should different room: rank and non-rank", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityA = createIdentity("A");
     const identityB = createIdentity("B");
@@ -158,7 +157,7 @@ describe("Test chess game", () => {
   });
 
   it("should can be cancelled", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identity = createIdentity("A");
 
@@ -174,7 +173,7 @@ describe("Test chess game", () => {
   });
 
   it("should white player win", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityA = createIdentity("A");
     const identityB = createIdentity("B");
@@ -246,7 +245,7 @@ describe("Test chess game", () => {
   });
 
   it("should black player win", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityOwner = createIdentity("Owner");
     const identityA = createIdentity("A");
@@ -296,7 +295,7 @@ describe("Test chess game", () => {
   });
 
   it("should stalemate", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityOwner = createIdentity("Owner");
     const identityA = createIdentity("A");
@@ -353,7 +352,7 @@ describe("Test chess game", () => {
   });
 
   it("should match timeout", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityA = createIdentity("A");
     const identityB = createIdentity("B");
@@ -418,7 +417,7 @@ describe("Test chess game", () => {
   });
 
   it("should promotion", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityOwner = createIdentity("Owner");
     const identityA = createIdentity("A");
@@ -485,7 +484,7 @@ describe("Test chess game", () => {
   });
 
   it("should username changed", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
     const identityA = createIdentity("A");
 
     actor.setIdentity(identityA);
@@ -493,9 +492,17 @@ describe("Test chess game", () => {
       username: ["saliskasep"],
       country: ["ID"],
       fullname: ["salis the ganteng"],
-      photo: []
+      photo: [],
     });
 
-    console.log(await actor.get_user(identityA.getPrincipal()))
+    let user = await actor.get_user(identityA.getPrincipal());
+
+    expect("ok" in user).toBe(true);
+
+    if ("ok" in user) {
+      expect(user.ok.fullname).toBe("salis the ganteng");
+      expect(user.ok.username[0]).toBe("saliskasep");
+      expect(user.ok.country[0]).toBe("ID");
+    }
   });
 });

@@ -3,7 +3,7 @@ import Principal "mo:base/Principal";
 import Buffer "mo:base/Buffer";
 
 module {
-  public func get_messages(
+  public func pop_messages(
     messages : Buffer.Buffer<Types.WebsocketMessageQueue>
   ) : [Types.WebsocketMessageQueue] {
     let response = Buffer.toArray<Types.WebsocketMessageQueue>(messages);

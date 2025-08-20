@@ -65,8 +65,49 @@ module {
   };
 
   public type WebsocketMessageQueue = {
-    principal: Principal;
-    method: Text;
-    body: Text;
+    principal : Principal;
+    method : Text;
+    body : Text;
+  };
+
+  public module Http {
+    public type HeaderField = (Text, Text);
+
+    public type HttpRequest = {
+      method : Text;
+      url : Text;
+      headers : [HeaderField];
+      body : Blob;
+      certificate_version : ?Nat16;
+    };
+
+    public type HttpUpdateRequest = {
+      method : Text;
+      url : Text;
+      headers : [HeaderField];
+      body : Blob;
+    };
+
+    public type HttpResponse = {
+      status_code : Nat16;
+      headers : [HeaderField];
+      body : Blob;
+      upgrade : ?Bool;
+      streaming_strategy : ?StreamingStrategy;
+    };
+
+    public type StreamingToken = Text;
+
+    public type StreamingCallbackHttpResponse = {
+      body : Blob;
+      token : ?StreamingToken;
+    };
+
+    public type StreamingStrategy = {
+      #Callback : {
+        callback : shared query (StreamingToken) -> async (?StreamingCallbackHttpResponse);
+        token : StreamingToken;
+      };
+    };
   };
 };
