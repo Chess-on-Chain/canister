@@ -33,6 +33,9 @@ Before you get started, make sure you have:
 2. **MOPS** – Motoko Package Manager  
    👉 [Quick start](https://docs.mops.one/quick-start)
 
+3. **Rust**
+   👉 [Install Rust](https://www.rust-lang.org/tools/install)
+
 ---
 
 ## 🚀 Deployment

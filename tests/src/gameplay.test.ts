@@ -525,7 +525,7 @@ describe("Test chess game", () => {
     await actor.accept_friendship(identityA.getPrincipal());
 
     actor.setIdentity(identityA);
-    console.log(await actor.invite_match(identityB.getPrincipal()));
+    await actor.invite_match(identityB.getPrincipal());
 
     actor.setIdentity(identityB);
 

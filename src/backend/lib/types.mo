@@ -7,6 +7,8 @@ module {
   public type FriendsValue = Text;
   public type Friends = Map.Map<FriendsKey, FriendsValue>;
 
+  // public type HistoryMatch = ;
+  
   public type Move = {
     fen : Text;
     time : Nat64;

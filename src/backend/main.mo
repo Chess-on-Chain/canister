@@ -23,6 +23,7 @@ import User "lib/user";
 import Hex "lib/hex";
 import File "lib/file";
 import Random "mo:base/Random";
+import Nat "mo:base/Nat";
 import Country "lib/country";
 // import Json "mo:json";
 
@@ -33,6 +34,7 @@ persistent actor {
   let files = Map.empty<Text, Types.File>();
   let usernames = Map.empty<Text, Principal>();
   let friends : Types.Friends = Map.empty();
+  let histories : Map.Map<Principal, [Nat64]> = Map.empty();
 
   var unfinished_matchs : [Nat64] = [];
   var match_count : Nat64 = 1;
@@ -237,6 +239,30 @@ persistent actor {
                   "match_finished",
                   payload,
                 );
+
+                var white_player_histories = Option.get(
+                  Map.get<Principal, [Nat64]>(histories, Principal.compare, match.white_player),
+                  [],
+                );
+                var black_player_histories = Option.get(
+                  Map.get<Principal, [Nat64]>(histories, Principal.compare, match.black_player),
+                  [],
+                );
+
+                white_player_histories := Array.append(white_player_histories, [match_id]);
+                black_player_histories := Array.append(black_player_histories, [match_id]);
+
+                if (Array.size(white_player_histories) == 1) {
+                  Map.add<Principal, [Nat64]>(histories, Principal.compare, match.white_player, white_player_histories);
+                } else {
+                  ignore Map.replace<Principal, [Nat64]>(histories, Principal.compare, match.white_player, white_player_histories);
+                };
+
+                if (Array.size(black_player_histories) == 1) {
+                  Map.add<Principal, [Nat64]>(histories, Principal.compare, match.black_player, black_player_histories);
+                } else {
+                  ignore Map.replace<Principal, [Nat64]>(histories, Principal.compare, match.black_player, black_player_histories);
+                };
 
                 return new_match;
               };
@@ -607,6 +633,50 @@ persistent actor {
         #err("Not found");
       };
     };
+  };
+
+  public query func get_histories(user_principal : Principal, start : Nat, max : Nat) : async (
+    Result.Result<[Types.MatchResultHistory], Text>
+  ) {
+    let user_histories = Option.get(
+      Map.get<Principal, [Nat64]>(histories, Principal.compare, user_principal),
+      [],
+    );
+
+    var results : [Types.MatchResultHistory] = [];
+    var i = start;
+
+    Debug.print(Nat.toText(Array.size(user_histories)) # "WEH EHEHEH");
+
+    label l while (true) {
+      if (i >= Array.size(user_histories)) {
+        break l;
+      };
+
+      let match_id = user_histories.get(i);
+      Debug.print(Nat64.toText(match_id) # " KASEPKAASEP");
+      let match_object = Match.Match(matchs, match_id);
+      i += 1;
+
+      switch (match_object.get()) {
+        case (?match) {
+          let history : Types.MatchResultHistory = {
+            match with
+            white_player = match.white_player;
+            black_player = match.black_player;
+          };
+
+          results := Array.append(results, [history]);
+        };
+        case null {};
+      };
+
+      if (Array.size(results) >= max) {
+        break l;
+      };
+    };
+
+    return #ok(results);
   };
 
   public shared ({ caller }) func edit_user(new_user : User.EditUser) : async (Result.Result<Bool, Text>) {
