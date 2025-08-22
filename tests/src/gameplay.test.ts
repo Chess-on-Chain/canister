@@ -1,4 +1,5 @@
-import { resolve } from "path";
+import path, { resolve } from "path";
+import fs from "fs/promises";
 import { describe, it, expect, beforeEach } from "bun:test";
 import { type _SERVICE } from "../declarations/contract.did";
 import { idlFactory } from "../declarations";
@@ -35,6 +36,7 @@ export const WASM_CHESS_ENGINE_PATH = resolve(
 describe("Test chess game", () => {
   let pic: TypePocketIC;
   let chessEngineCanister: Principal;
+  let actor: Actor<_SERVICE>;
 
   beforeEach(async () => {
     pic = await PocketIc.create(process.env.PIC_URL);
@@ -43,9 +45,9 @@ describe("Test chess game", () => {
       canisterId: chessEngineCanister,
       wasm: WASM_CHESS_ENGINE_PATH,
     });
-  });
+    // });
 
-  const getActor = async () => {
+    // const getActor = async () => {
     const identityOwner = createIdentity("Owner");
     const canister = await pic.createCanister();
 
@@ -55,18 +57,12 @@ describe("Test chess game", () => {
     });
 
     // let actor = createActor(canister)
-    let actor: Actor<_SERVICE> = pic.createActor(idlFactory, canister);
-
-    // let actor = fixture.actor;
-
-    actor.initialize(identityOwner.getPrincipal(), chessEngineCanister);
-    await pic.tick();
-
-    return actor;
-  };
+    actor = pic.createActor(idlFactory, canister);
+    await actor.initialize(identityOwner.getPrincipal(), chessEngineCanister);
+  });
 
   it("should in waiting room", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identity = createIdentity("A");
 
@@ -87,7 +83,7 @@ describe("Test chess game", () => {
   });
 
   it("should match created", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityA = createIdentity("A");
     const identityB = createIdentity("B");
@@ -113,7 +109,7 @@ describe("Test chess game", () => {
   });
 
   it("should can't make match", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityA = createIdentity("A");
     const identityB = createIdentity("B");
@@ -134,7 +130,7 @@ describe("Test chess game", () => {
   });
 
   it("should different room: rank and non-rank", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityA = createIdentity("A");
     const identityB = createIdentity("B");
@@ -158,7 +154,7 @@ describe("Test chess game", () => {
   });
 
   it("should can be cancelled", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identity = createIdentity("A");
 
@@ -174,7 +170,7 @@ describe("Test chess game", () => {
   });
 
   it("should white player win", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityA = createIdentity("A");
     const identityB = createIdentity("B");
@@ -246,7 +242,7 @@ describe("Test chess game", () => {
   });
 
   it("should black player win", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityOwner = createIdentity("Owner");
     const identityA = createIdentity("A");
@@ -296,7 +292,7 @@ describe("Test chess game", () => {
   });
 
   it("should stalemate", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityOwner = createIdentity("Owner");
     const identityA = createIdentity("A");
@@ -353,7 +349,7 @@ describe("Test chess game", () => {
   });
 
   it("should match timeout", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityA = createIdentity("A");
     const identityB = createIdentity("B");
@@ -418,7 +414,7 @@ describe("Test chess game", () => {
   });
 
   it("should promotion", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
 
     const identityOwner = createIdentity("Owner");
     const identityA = createIdentity("A");
@@ -485,17 +481,60 @@ describe("Test chess game", () => {
   });
 
   it("should username changed", async () => {
-    const actor = await getActor();
+    // const actor = await getActor();
     const identityA = createIdentity("A");
+
+    const image_path = path.join(__dirname, "..", "images", "example.jpg");
+    const image = await fs.readFile(image_path);
 
     actor.setIdentity(identityA);
     await actor.edit_user({
       username: ["saliskasep"],
       country: ["ID"],
       fullname: ["salis the ganteng"],
-      photo: []
+      photo: [
+        {
+          extension: "jpg",
+          data: image,
+        },
+      ],
     });
 
-    console.log(await actor.get_user(identityA.getPrincipal()))
+    const user = await actor.get_user(identityA.getPrincipal());
+    expect("ok" in user).toBe(true);
+
+    if ("ok" in user) {
+      expect(user.ok.country[0]).toBe("ID");
+      expect(user.ok.username[0]).toBe("saliskasep");
+      expect(user.ok.fullname).toBe("salis the ganteng");
+    }
+  });
+
+  it("should invite match", async () => {
+    // const identityOwner = createIdentity("Owner");
+
+    const identityA = createIdentity("A");
+    const identityB = createIdentity("B");
+
+    actor.setIdentity(identityA);
+    await actor.register();
+    await actor.send_friendship(identityB.getPrincipal());
+
+    actor.setIdentity(identityB);
+    await actor.register();
+    await actor.accept_friendship(identityA.getPrincipal());
+
+    actor.setIdentity(identityA);
+    console.log(await actor.invite_match(identityB.getPrincipal()));
+
+    actor.setIdentity(identityB);
+
+    // actor.setIdentity(identityOwner);
+    // console.log(await actor.pop_messages());
+    // console.log(await actor.pop_messages());
+
+    // console.log(await actor.accept_match(identityA.getPrincipal()));
+
+    // console.log(await actor.get_friends(identityB.getPrincipal(), false))
   });
 });

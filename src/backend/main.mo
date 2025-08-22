@@ -30,8 +30,9 @@ persistent actor {
   // STORAGES
   let users = Map.empty<Text, Types.User>();
   let matchs = Map.empty<Nat64, Types.Match>();
-  let files = Map.empty<Blob, Types.File>();
+  let files = Map.empty<Text, Types.File>();
   let usernames = Map.empty<Text, Principal>();
+  let friends : Types.Friends = Map.empty();
 
   var unfinished_matchs : [Nat64] = [];
   var match_count : Nat64 = 1;
@@ -80,6 +81,10 @@ persistent actor {
     };
   };
 
+  private func only_owner(caller : Principal) {
+    assert Principal.equal(caller, owner) or Principal.toText(caller) == Principal.toText(owner);
+  };
+
   private func get_or_create_user(user_principal : Principal) : Types.User {
     let user = Map.get<Text, Types.User>(users, Text.compare, Principal.toText(user_principal));
 
@@ -100,10 +105,10 @@ persistent actor {
 
         User.insert(users, user_principal, user);
 
-        user;
+        return user;
       };
       case (?user) {
-        user;
+        return user;
       };
     };
   };
@@ -155,8 +160,8 @@ persistent actor {
           last_move = null;
         });
 
-        let white_player_object = User.User(users, match.white_player);
-        let black_player_object = User.User(users, match.black_player);
+        let white_player_object = User.User(users, friends, match.white_player);
+        let black_player_object = User.User(users, friends, match.black_player);
 
         switch (new_match, white_player_object.get(), black_player_object.get()) {
           case (#ok(new_match), ?_white_player, ?_black_player) {
@@ -215,7 +220,25 @@ persistent actor {
                 Debug.trap("ERROR: " # white_player_err # " : " # black_player_err);
               };
               case _ {
-                new_match;
+                let payload : Types.MatchFinishedMessage = {
+                  winner = winner;
+                };
+
+                Message.push_message(
+                  messages,
+                  match.white_player,
+                  "match_finished",
+                  payload,
+                );
+
+                Message.push_message(
+                  messages,
+                  match.black_player,
+                  "match_finished",
+                  payload,
+                );
+
+                return new_match;
               };
             };
 
@@ -290,6 +313,27 @@ persistent actor {
 
     unfinished_matchs := Array.append(unfinished_matchs, [id]);
 
+    let payload : Types.MatchCreatedMessage = {
+      black_player = black_player;
+      white_player = white_player;
+      fen = match.fen;
+      match_id = id;
+    };
+
+    Message.push_message(
+      messages,
+      player_a,
+      "match_created",
+      payload,
+    );
+
+    Message.push_message(
+      messages,
+      player_b,
+      "match_created",
+      payload,
+    );
+
     #ok(match);
   };
 
@@ -302,12 +346,19 @@ persistent actor {
   };
 
   public shared ({ caller }) func change_initial_fen(new_initial_fen : Text) {
-    assert Principal.equal(caller, owner) or Principal.toText(caller) == Principal.toText(caller);
-
+    only_owner(caller);
     initial_fen := new_initial_fen;
   };
 
-  public shared ({ caller }) func invite_match(friend_principal : Principal) : async () {
+  public shared ({ caller }) func invite_match(friend_principal : Principal) : async (
+    Result.Result<Bool, Text>
+  ) {
+    let user_object = User.User(users, friends, caller);
+
+    if (not user_object.has_friendship(friend_principal)) {
+      return #err("not yet friends");
+    };
+
     switch (Map.get<Principal, Principal>(invite_rooms, Principal.compare, caller)) {
       case null {
         Map.add<Principal, Principal>(invite_rooms, Principal.compare, caller, friend_principal);
@@ -316,6 +367,8 @@ persistent actor {
         ignore Map.replace<Principal, Principal>(invite_rooms, Principal.compare, caller, friend_principal);
       };
     };
+
+    return #ok(true);
   };
 
   public shared ({ caller }) func accept_match(friend_principal : Principal) : async Result.Result<Types.Match, Text> {
@@ -442,6 +495,28 @@ persistent actor {
         let turn = status / 10;
         let game_status = status % 10;
 
+        let payload : Types.MoveCreatedMessage = {
+          color = if (match.is_white_turn) "white" else "black";
+          fen = result.fen;
+          from_position = from_position;
+          to_position = to_position;
+          promotion = promotion;
+        };
+
+        Message.push_message(
+          messages,
+          match.white_player,
+          "move_created",
+          payload,
+        );
+
+        Message.push_message(
+          messages,
+          match.black_player,
+          "move_created",
+          payload,
+        );
+
         switch (game_status, turn) {
           case (1, _) {
             #ok(release_match(match_id, "draw"));
@@ -475,7 +550,7 @@ persistent actor {
   };
 
   public query func get_user(user_id : Principal) : async (Result.Result<Types.User, Text>) {
-    let user = User.User(users, user_id).get();
+    let user = User.User(users, friends, user_id).get();
 
     switch (user) {
       case (?user) {
@@ -487,13 +562,25 @@ persistent actor {
     };
   };
 
+  public query func get_file(file_id_hex : Text) : async (Result.Result<Types.File, Text>) {
+    let file = File.get(files, file_id_hex);
+    switch (file) {
+      case (?file) {
+        return #ok(file);
+      };
+      case null {
+        #err("file not found");
+      };
+    };
+  };
+
   public query func get_match(match_id : Nat64) : async (Result.Result<Types.MatchResult, Text>) {
     let match = Match.Match(matchs, match_id).get();
 
     switch (match) {
       case (?match) {
-        let white_player_user = User.User(users, match.white_player).get();
-        let black_player_user = User.User(users, match.black_player).get();
+        let white_player_user = User.User(users, friends, match.white_player).get();
+        let black_player_user = User.User(users, friends, match.black_player).get();
 
         switch (white_player_user, black_player_user) {
           case (?white_player_user, ?black_player_user) {
@@ -524,8 +611,8 @@ persistent actor {
 
   public shared ({ caller }) func edit_user(new_user : User.EditUser) : async (Result.Result<Bool, Text>) {
     ignore get_or_create_user(caller);
-    
-    let user_object = User.User(users, caller);
+
+    let user_object = User.User(users, friends, caller);
     var user_updated : User.UpdatedUser = {
       country = new_user.country;
       fullname = new_user.fullname;
@@ -577,7 +664,7 @@ persistent actor {
       };
 
       let random_blob = await Random.blob();
-      let random_string = Hex.encode(Blob.toArray(random_blob));
+      let random_string = Hex.encode(random_blob);
 
       let file_id = File.insert(files, random_string # "." # photo.extension, photo.data);
 
@@ -614,18 +701,9 @@ persistent actor {
           data = new_photo.data;
         });
 
-        let file = File.get(files, file_id);
-
-        switch (file) {
-          case (?file) {
-            user_updated := { user_updated with photo = ?(file : Types.File) };
-            ignore user_object.update(user_updated);
-            #ok(true);
-          };
-          case null {
-            Debug.trap("Upload error");
-          };
-        };
+        user_updated := { user_updated with photo = ?file_id };
+        ignore user_object.update(user_updated);
+        #ok(true);
       };
       case (_, ?new_username, ?new_photo) {
         let file_id = await prechange_photo({
@@ -633,16 +711,7 @@ persistent actor {
           data = new_photo.data;
         });
 
-        let file = File.get(files, file_id);
-
-        switch (file) {
-          case (?file) {
-            user_updated := { user_updated with photo = ?(file : Types.File) };
-          };
-          case null {
-            Debug.trap("Upload error");
-          };
-        };
+        user_updated := { user_updated with photo = ?file_id };
 
         await prechange_username(new_username);
         ignore user_object.update(user_updated);
@@ -651,8 +720,98 @@ persistent actor {
     };
   };
 
-  public func get_messages() : async ([Types.WebsocketMessageQueue]) {
-    Message.get_messages(messages);
+  public shared ({ caller }) func register() : async () {
+    ignore get_or_create_user(caller);
+  };
+
+  public shared ({ caller }) func send_friendship(to : Principal) : async (Result.Result<Bool, Text>) {
+    let user_object = User.User(users, friends, caller);
+
+    switch (user_object.get()) {
+      case (?_user) {
+        let payload : Types.SendFriendshipMessage = {
+          from = caller;
+          to = to;
+        };
+
+        Message.push_message(
+          messages,
+          to,
+          "incoming_friendship",
+          payload,
+        );
+
+        return user_object.send_friendship(to);
+      };
+      case null {
+        return #err("User not found");
+      };
+    };
+
+  };
+
+  public shared ({ caller }) func accept_friendship(from : Principal) : async (Result.Result<Bool, Text>) {
+    let user_object = User.User(users, friends, caller);
+
+    switch (user_object.get()) {
+      case (?_user) {
+        let payload : Types.AcceptFriendshipMessage = {
+          from = caller;
+        };
+
+        Message.push_message(
+          messages,
+          from,
+          "accepted_friendship",
+          payload,
+        );
+        return user_object.accept_friendship(from);
+      };
+      case null {
+        return #err("User not found");
+      };
+    };
+  };
+
+  public shared ({ caller }) func reject_friendship(from : Principal) : async (Result.Result<Bool, Text>) {
+    let user_object = User.User(users, friends, caller);
+
+    switch (user_object.get()) {
+      case (?_user) {
+        let payload : Types.RejectFriendshipMessage = {
+          from = caller;
+        };
+
+        Message.push_message(
+          messages,
+          from,
+          "rejected_friendship",
+          payload,
+        );
+        return user_object.reject_friendship(from);
+      };
+      case null {
+        return #err("User not found");
+      };
+    };
+  };
+
+  public query func get_friends(user_principal : Principal, incoming : Bool) : async (Result.Result<[Types.User], Text>) {
+    let user_object = User.User(users, friends, user_principal);
+
+    switch (user_object.get()) {
+      case (?_user) {
+        return user_object.get_friends(incoming);
+      };
+      case null {
+        return #err("User not found");
+      };
+    };
+  };
+
+  public shared ({ caller }) func pop_messages() : async ([Types.WebsocketMessageQueue]) {
+    only_owner(caller);
+    Message.pop_messages(messages);
   };
 
   ignore Timer.recurringTimer<system>(#seconds 10, cronjob) // eksekusi cronjob;

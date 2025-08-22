@@ -1,28 +1,32 @@
 import Blob "mo:base/Blob";
 import Option "mo:base/Option";
 import Debug "mo:base/Debug";
+import Text "mo:base/Text";
 import Map "mo:core/Map";
 import Types "types";
 import Sha256 "mo:sha2/Sha256";
+import Hex "hex";
 
 module {
-  public func get(files : Map.Map<Blob, Types.File>, hash : Blob) : ?Types.File {
-    Map.get<Blob, Types.File>(files, Blob.compare, hash);
+  public func get(files : Map.Map<Text, Types.File>, hash : Text) : ?Types.File {
+    Map.get<Text, Types.File>(files, Text.compare, hash);
   };
 
-  public func insert(files : Map.Map<Blob, Types.File>, filename : Text, data : Blob) : Blob {
+  public func insert(files : Map.Map<Text, Types.File>, filename : Text, data : Blob) : Blob {
     if (data.size() >= 524288) {
       Debug.trap("File too large");
     };
 
     let hash = Sha256.fromBlob(#sha256, data);
-    let file = get(files, hash);
+    let hash_hex = Hex.encode(hash);
+    Debug.print(hash_hex);
+    let file = get(files, hash_hex);
 
-    if (not Option.isNull(file)) {
-      Map.add<Blob, Types.File>(
+    if (Option.isNull(file)) {
+      Map.add<Text, Types.File>(
         files,
-        Blob.compare,
-        hash,
+        Text.compare,
+        hash_hex,
         {
           filename = filename;
           data = data;

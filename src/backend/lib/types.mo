@@ -1,7 +1,12 @@
 import Nat64 "mo:base/Nat64";
 import Principal "mo:base/Principal";
+import Map "mo:core/Map";
 
 module {
+  public type FriendsKey = Text;
+  public type FriendsValue = Text;
+  public type Friends = Map.Map<FriendsKey, FriendsValue>;
+
   public type Move = {
     fen : Text;
     time : Nat64;
@@ -23,7 +28,7 @@ module {
     score : Nat16;
     is_banned : Bool;
     country : ?Text;
-    photo : ?File;
+    photo : ?Blob;
   };
 
   public type Match = {
@@ -65,8 +70,47 @@ module {
   };
 
   public type WebsocketMessageQueue = {
-    principal: Principal;
-    method: Text;
-    body: Text;
+    principal : Principal;
+    method : Text;
+    body : Blob;
   };
+
+  public type SendFriendshipMessage = {
+    // incoming_friendship
+    from : Principal;
+    to : Principal;
+  };
+
+  public type AcceptFriendshipMessage = {
+    // accepted_friendship
+    from : Principal;
+  };
+
+  public type RejectFriendshipMessage = {
+    // rejected_friendship
+    from : Principal;
+  };
+
+  public type MatchCreatedMessage = {
+    // match_created
+    white_player : Principal;
+    black_player : Principal;
+    match_id : Nat64;
+    fen : Text;
+  };
+
+  public type MoveCreatedMessage = {
+    // move_created
+    color : Text;
+    from_position : Text;
+    to_position : Text;
+    promotion : ?Text;
+    fen : Text;
+  };
+
+  public type MatchFinishedMessage = {
+    // match_finished
+    winner : Text;
+  };
+
 };

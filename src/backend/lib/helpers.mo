@@ -7,6 +7,7 @@ import Nat "mo:core/Nat";
 
 // Helper function to get index of a character in a string
 module {
+  
   private func charIndex(chars : Text, c : Char) : ?Nat {
     var idx = 0;
     for (ch in chars.chars()) {
