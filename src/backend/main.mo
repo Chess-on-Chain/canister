@@ -166,22 +166,36 @@ persistent actor {
         let black_player_object = User.User(users, friends, match.black_player);
 
         switch (new_match, white_player_object.get(), black_player_object.get()) {
-          case (#ok(new_match), ?_white_player, ?_black_player) {
+          case (#ok(new_match), ?white_player, ?black_player) {
+
+            let k_factor : Nat8 = 32;
+            var score_a = 0.5;
+            if (winner == "white") {
+              score_a := 1;
+            } else if (winner == "black") {
+              score_a := 0;
+            };
+
             let white_player_data = {
               var incr_win : Nat16 = 0;
               var incr_lost : Nat16 = 0;
               var incr_draw : Nat16 = 0;
-              var score = null;
+              var score : Nat16 = 0;
             };
 
             let black_player_data = {
               var incr_win : Nat16 = 0;
               var incr_lost : Nat16 = 0;
               var incr_draw : Nat16 = 0;
-              var score = null;
+              var score : Nat16 = 0;
             };
 
             if (match.is_ranked) {
+              let (white_player_new_elo, black_player_new_elo) = Helpers.update_elo(white_player.score, black_player.score, score_a, k_factor);
+
+              white_player_data.score := white_player_new_elo;
+              black_player_data.score := black_player_new_elo;
+
               if (winner == "white") {
                 white_player_data.incr_win := 1;
                 black_player_data.incr_lost := 1;
@@ -203,7 +217,7 @@ persistent actor {
               incr_win = white_player_data.incr_win;
               incr_lost = white_player_data.incr_lost;
               incr_draw = white_player_data.incr_draw;
-              score = white_player_data.score;
+              score = ?white_player_data.score;
             });
             let black_player_updated = black_player_object.update({
               username = null;
@@ -214,7 +228,7 @@ persistent actor {
               incr_win = black_player_data.incr_win;
               incr_lost = black_player_data.incr_lost;
               incr_draw = black_player_data.incr_draw;
-              score = black_player_data.score;
+              score = ?black_player_data.score;
             });
 
             switch (white_player_updated, black_player_updated) {
@@ -222,49 +236,7 @@ persistent actor {
                 Debug.trap("ERROR: " # white_player_err # " : " # black_player_err);
               };
               case _ {
-                let payload : Types.MatchFinishedMessage = {
-                  winner = winner;
-                };
-
-                Message.push_message(
-                  messages,
-                  match.white_player,
-                  "match_finished",
-                  payload,
-                );
-
-                Message.push_message(
-                  messages,
-                  match.black_player,
-                  "match_finished",
-                  payload,
-                );
-
-                var white_player_histories = Option.get(
-                  Map.get<Principal, [Nat64]>(histories, Principal.compare, match.white_player),
-                  [],
-                );
-                var black_player_histories = Option.get(
-                  Map.get<Principal, [Nat64]>(histories, Principal.compare, match.black_player),
-                  [],
-                );
-
-                white_player_histories := Array.append(white_player_histories, [match_id]);
-                black_player_histories := Array.append(black_player_histories, [match_id]);
-
-                if (Array.size(white_player_histories) == 1) {
-                  Map.add<Principal, [Nat64]>(histories, Principal.compare, match.white_player, white_player_histories);
-                } else {
-                  ignore Map.replace<Principal, [Nat64]>(histories, Principal.compare, match.white_player, white_player_histories);
-                };
-
-                if (Array.size(black_player_histories) == 1) {
-                  Map.add<Principal, [Nat64]>(histories, Principal.compare, match.black_player, black_player_histories);
-                } else {
-                  ignore Map.replace<Principal, [Nat64]>(histories, Principal.compare, match.black_player, black_player_histories);
-                };
-
-                return new_match;
+                new_match;
               };
             };
 
@@ -299,7 +271,7 @@ persistent actor {
 
     let random_value = RandomCustom.random_nat8();
 
-    Debug.print("Random Value:" # Nat8.toText(random_value));
+    Debug.print("Random Value: " # Nat8.toText(random_value));
 
     var white_player = player_a;
     var black_player = player_b;
