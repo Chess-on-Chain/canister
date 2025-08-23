@@ -537,4 +537,43 @@ describe("Test chess game", () => {
 
     // console.log(await actor.get_friends(identityB.getPrincipal(), false))
   });
+
+  it("should resign", async () => {
+    const identityA = createIdentity("A");
+    const identityB = createIdentity("B");
+
+    for (const must_win of ["black", "white", "black", "white", "white"]) {
+      actor.setIdentity(identityA);
+      await actor.make_match(true);
+
+      actor.setIdentity(identityB);
+      await actor.make_match(true);
+      const match = await actor.get_active_match(identityA.getPrincipal());
+
+      expect("ok" in match).toBe(true);
+
+      if ("ok" in match) {
+        const whitePlayer =
+          match.ok.white_player.toText() == identityA.getPrincipal().toText()
+            ? identityA
+            : identityB;
+        const blackPlayer =
+          whitePlayer.getPrincipal().toText() ==
+          identityA.getPrincipal().toText()
+            ? identityB
+            : identityA;
+
+        if (must_win == "black") {
+          actor.setIdentity(whitePlayer);
+        } else {
+          actor.setIdentity(blackPlayer);
+        }
+
+        await actor.resign();
+
+        const match_updated: any = await actor.get_match(match.ok.id);
+        expect(match_updated.ok.winner).toBe(must_win);
+      }
+    }
+  });
 });

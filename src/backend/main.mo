@@ -47,7 +47,7 @@ persistent actor {
   transient let messages = Buffer.Buffer<Types.WebsocketMessageQueue>(0);
   transient let rooms = Map.empty<Principal, Bool>();
   transient let invite_rooms = Map.empty<Principal, Principal>();
-  transient let on_match = Map.empty<Principal, Bool>();
+  transient let on_match = Map.empty<Principal, Nat64>();
   transient let TIMEOUT_MATCH_NANOSECONDS : Nat64 = 60000000000; // 60 seconds
 
   // ENDSTORAGES
@@ -121,12 +121,12 @@ persistent actor {
 
     let is_banned = user.is_banned;
 
-    let on_match_exists = switch (Map.get<Principal, Bool>(on_match, Principal.compare, user_principal)) {
+    let on_match_exists = switch (Map.get<Principal, Nat64>(on_match, Principal.compare, user_principal)) {
       case null {
         false;
       };
-      case (?status) {
-        status;
+      case (_) {
+        true;
       };
     };
 
@@ -151,8 +151,8 @@ persistent actor {
     switch (match_object.get()) {
 
       case (?match) {
-        Map.remove<Principal, Bool>(on_match, Principal.compare, match.white_player);
-        Map.remove<Principal, Bool>(on_match, Principal.compare, match.black_player);
+        Map.remove<Principal, Nat64>(on_match, Principal.compare, match.white_player);
+        Map.remove<Principal, Nat64>(on_match, Principal.compare, match.black_player);
 
         let new_match = match_object.update({
           moves = null;
@@ -328,12 +328,23 @@ persistent actor {
 
     Map.add<Nat64, Types.Match>(matchs, Nat64.compare, id, match);
 
-    switch (Map.get<Principal, Bool>(on_match, Principal.compare, player_a)) {
+    switch (Map.get<Principal, Nat64>(on_match, Principal.compare, player_a)) {
       case null {
-        Map.add<Principal, Bool>(on_match, Principal.compare, player_a, true);
+        Map.add<Principal, Nat64>(on_match, Principal.compare, player_a, match.id);
       };
       case (_) {
-        ignore Map.replace<Principal, Bool>(on_match, Principal.compare, player_a, true);
+        // ignore Map.replace<Principal, Nat64>(on_match, Principal.compare, player_a, match.id);
+        Debug.trap("Player A cant create match");
+      };
+    };
+
+    switch (Map.get<Principal, Nat64>(on_match, Principal.compare, player_b)) {
+      case null {
+        Map.add<Principal, Nat64>(on_match, Principal.compare, player_b, match.id);
+      };
+      case (_) {
+        // ignore Map.replace<Principal, Nat64>(on_match, Principal.compare, player_a, match.id);
+        Debug.trap("Player B cant create match");
       };
     };
 
@@ -573,6 +584,44 @@ persistent actor {
 
   public shared ({ caller }) func cancel_match_room() : async () {
     Map.remove<Principal, Bool>(rooms, Principal.compare, caller);
+  };
+
+  public shared ({ caller }) func resign() : async (Result.Result<Bool, Text>) {
+    let match = await get_active_match(caller);
+
+    switch (match) {
+      case (#err(text)) {
+        #err(text);
+      };
+      case (#ok(match)) {
+        let winner = if (match.white_player == caller) "black" else "white";
+        ignore release_match(match.id, winner);
+        #ok(true);
+      };
+    };
+  };
+
+  public query func get_active_match(user_principal : Principal) : async (Result.Result<Types.MatchResultHistory, Text>) {
+    let match_id = Map.get<Principal, Nat64>(on_match, Principal.compare, user_principal);
+
+    switch (match_id) {
+      case (?match_id) {
+        let match = Match.Match(matchs, match_id).get();
+
+        switch (match) {
+          case (?match) {
+            return #ok(match);
+          };
+          case null {
+            return #err("No active match found");
+
+          };
+        };
+      };
+      case null {
+        return #err("No active match found");
+      };
+    };
   };
 
   public query func get_user(user_id : Principal) : async (Result.Result<Types.User, Text>) {
