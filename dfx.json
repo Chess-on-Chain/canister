@@ -2,7 +2,6 @@
   "canisters": {
     "contract": {
       "main": "src/backend/main.mo",
-      "dependencies": ["chess_engine"],
       "type": "motoko"
     },
     "chess_engine": {

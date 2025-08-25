@@ -10,6 +10,7 @@ import {
   type PocketIc as TypePocketIC,
 } from "@dfinity/pic";
 import type { Principal } from "@dfinity/principal";
+import type { Identity } from "@dfinity/agent";
 
 export const WASM_PATH = resolve(
   import.meta.dirname,
@@ -40,14 +41,15 @@ describe("Test chess game", () => {
 
   beforeEach(async () => {
     pic = await PocketIc.create(process.env.PIC_URL);
+    await pic.setTime(Date.now());
+    await pic.tick();
+
     chessEngineCanister = await pic.createCanister();
     await pic.installCode({
       canisterId: chessEngineCanister,
       wasm: WASM_CHESS_ENGINE_PATH,
     });
-    // });
 
-    // const getActor = async () => {
     const identityOwner = createIdentity("Owner");
     const canister = await pic.createCanister();
 
@@ -504,9 +506,22 @@ describe("Test chess game", () => {
     expect("ok" in user).toBe(true);
 
     if ("ok" in user) {
+      let username_response = await actor.get_principal_from_username(
+        "NOT_FOUND"
+      );
+
+      expect("err" in username_response && username_response.err).toBe(
+        "Username not found"
+      );
+
       expect(user.ok.country[0]).toBe("ID");
       expect(user.ok.username[0]).toBe("saliskasep");
       expect(user.ok.fullname).toBe("salis the ganteng");
+
+      username_response = await actor.get_principal_from_username("saliskasep");
+      expect("ok" in username_response && username_response.ok.toText()).toBe(
+        identityA.getPrincipal().toText()
+      );
     }
   });
 
@@ -568,11 +583,116 @@ describe("Test chess game", () => {
         } else {
           actor.setIdentity(blackPlayer);
         }
-
         await actor.resign();
 
         const match_updated: any = await actor.get_match(match.ok.id);
         expect(match_updated.ok.winner).toBe(must_win);
+      }
+    }
+  });
+
+  it("should room timeout", async () => {
+    const identityA = createIdentity("A");
+    actor.setIdentity(identityA);
+    await actor.make_match(true);
+
+    let match = await actor.make_match(true);
+    expect("err" in match && match.err).toBe("Can't make match");
+
+    let newDate = new Date(Date.now() + 2 * 60 * 1000);
+    await pic.setTime(newDate);
+    await pic.tick();
+
+    match = await actor.make_match(true);
+
+    expect("err" in match && match.err).toBe("Can't make match");
+
+    newDate = new Date(Date.now() + 6 * 60 * 1000);
+    await pic.setTime(newDate);
+    await pic.tick();
+
+    match = await actor.make_match(true);
+
+    expect("ok" in match && "text" in match.ok && match.ok.text).toBe(
+      "Waiting opponent..."
+    );
+  });
+
+  // TODO: ubah jadi parallel
+  it("should flood by match", async () => {
+    const players: [Identity, Identity][] = [];
+
+    for (let i = 0; i < 10; i++) {
+      const identityA = createIdentity(Math.random().toString());
+      const identityB = createIdentity(Math.random().toString());
+
+      players.push([identityA, identityB]);
+    }
+
+    const moves: [string, string][] = [
+      ["E2", "E3"],
+      ["A7", "A6"],
+      ["D1", "F3"],
+      ["A6", "A5"],
+      ["F1", "C4"],
+      ["A5", "A4"],
+      ["F3", "F7"],
+    ];
+
+    for (const player of players) {
+      const [playerA, playerB] = player;
+
+      actor.setIdentity(playerA);
+      await actor.make_match(true);
+
+      actor.setIdentity(playerB);
+      await actor.make_match(true);
+      const match = await actor.get_active_match(playerA.getPrincipal());
+
+      expect("ok" in match).toBe(true);
+
+      if ("ok" in match) {
+        const match_id = match.ok.id;
+
+        const whitePlayer =
+          match.ok.white_player.toText() == playerA.getPrincipal().toText()
+            ? playerA
+            : playerB;
+        const blackPlayer =
+          whitePlayer.getPrincipal().toText() == playerA.getPrincipal().toText()
+            ? playerB
+            : playerA;
+
+        let isWhiteTurn = true;
+
+        let i = 0;
+        for (const move of moves) {
+          i++;
+          if (isWhiteTurn) {
+            actor.setIdentity(whitePlayer);
+          } else {
+            actor.setIdentity(blackPlayer);
+          }
+
+          isWhiteTurn = !isWhiteTurn;
+
+          const match_updated = await actor.make_move(
+            match_id,
+            move[0],
+            move[1],
+            []
+          );
+          expect("err" in match_updated).toBe(false);
+
+          if (i == moves.length) {
+            if ("ok" in match_updated) {
+              expect(match_updated.ok.fen).toBe(
+                "rnbqkbnr/1ppppQpp/8/8/p1B5/4P3/PPPP1PPP/RNB1K1NR b KQkq - 0 1"
+              );
+              expect(match_updated.ok.winner).toBe("white");
+            }
+          }
+        }
       }
     }
   });

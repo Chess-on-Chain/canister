@@ -1,6 +1,7 @@
 import Types "types";
 import Principal "mo:base/Principal";
 import Buffer "mo:base/Buffer";
+import Blob "mo:base/Blob";
 
 module {
   public func pop_messages(
@@ -16,10 +17,10 @@ module {
     messages : Buffer.Buffer<Types.WebsocketMessageQueue>,
     principal : Principal,
     method : Text,
-    body : Any,
+    body : Blob,
   ) {
     messages.add({
-      body = to_candid(body);
+      body = body;
       method = method;
       principal = principal;
     });

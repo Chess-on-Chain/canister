@@ -36,7 +36,7 @@ persistent actor {
   let friends : Types.Friends = Map.empty();
   let histories : Map.Map<Principal, [Nat64]> = Map.empty();
 
-  var unfinished_matchs : [Nat64] = [];
+  var unfinished_matchs : [Nat64] = []; // otomatis di-clear di cronjob
   var match_count : Nat64 = 1;
 
   var initial_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -45,10 +45,11 @@ persistent actor {
   var chess_engine_principal = Principal.fromBlob(Blob.fromArray([]));
 
   transient let messages = Buffer.Buffer<Types.WebsocketMessageQueue>(0);
-  transient let rooms = Map.empty<Principal, Bool>();
+  transient let rooms = Map.empty<Principal, (Nat64, Bool)>(); // otomatis di-clear di cronjob saat timeout
   transient let invite_rooms = Map.empty<Principal, Principal>();
   transient let on_match = Map.empty<Principal, Nat64>();
   transient let TIMEOUT_MATCH_NANOSECONDS : Nat64 = 60000000000; // 60 seconds
+  transient let TIMEOUT_ROOM_NANOSECONDS : Nat64 = 5 * 60000000000; // 5 minutes
 
   // ENDSTORAGES
 
@@ -67,7 +68,9 @@ persistent actor {
           let distance = now - match.last_move;
 
           if (distance >= TIMEOUT_MATCH_NANOSECONDS) {
-            ignore release_match(match_id, if (match.is_white_turn) "black" else "white");
+            if (match.winner == "ongoing") {
+              ignore release_match(match_id, if (match.is_white_turn) "black" else "white");
+            };
           } else {
             new_unfinished_matchs := Array.append(new_unfinished_matchs, [match_id]);
             // masukan kembali ke antrian
@@ -79,6 +82,16 @@ persistent actor {
 
       if (Array.size(unfinished_matchs) != Array.size(new_unfinished_matchs)) {
         unfinished_matchs := new_unfinished_matchs;
+      };
+
+    };
+
+    for ((user, room) in Map.entries(rooms)) {
+      let (room_created, _room_is_rank) = room;
+      let distance = now - room_created;
+
+      if (distance >= TIMEOUT_ROOM_NANOSECONDS) {
+        Map.remove<Principal, (Nat64, Bool)>(rooms, Principal.compare, user);
       };
     };
   };
@@ -130,7 +143,7 @@ persistent actor {
       };
     };
 
-    let empty_room = switch (Map.get<Principal, Bool>(rooms, Principal.compare, user_principal)) {
+    let empty_room = switch (Map.get<Principal, (Nat64, Bool)>(rooms, Principal.compare, user_principal)) {
       case null {
         true;
       };
@@ -236,6 +249,36 @@ persistent actor {
                 Debug.trap("ERROR: " # white_player_err # " : " # black_player_err);
               };
               case _ {
+                let payload : Types.MatchFinishedMessage = {
+                  winner = winner;
+                };
+                Message.push_message(messages, match.white_player, "match_finished", to_candid (payload));
+                Message.push_message(messages, match.black_player, "match_finished", to_candid (payload));
+
+                var white_player_histories = Option.get(
+                  Map.get<Principal, [Nat64]>(histories, Principal.compare, match.white_player),
+                  [],
+                );
+                var black_player_histories = Option.get(
+                  Map.get<Principal, [Nat64]>(histories, Principal.compare, match.black_player),
+                  [],
+                );
+
+                white_player_histories := Array.append(white_player_histories, [match_id]);
+                black_player_histories := Array.append(black_player_histories, [match_id]);
+
+                if (Array.size(white_player_histories) == 1) {
+                  Map.add<Principal, [Nat64]>(histories, Principal.compare, match.white_player, white_player_histories);
+                } else {
+                  ignore Map.replace<Principal, [Nat64]>(histories, Principal.compare, match.white_player, white_player_histories);
+                };
+
+                if (Array.size(black_player_histories) == 1) {
+                  Map.add<Principal, [Nat64]>(histories, Principal.compare, match.black_player, black_player_histories);
+                } else {
+                  ignore Map.replace<Principal, [Nat64]>(histories, Principal.compare, match.black_player, black_player_histories);
+                };
+
                 new_match;
               };
             };
@@ -333,14 +376,14 @@ persistent actor {
       messages,
       player_a,
       "match_created",
-      payload,
+      to_candid (payload),
     );
 
     Message.push_message(
       messages,
       player_b,
       "match_created",
-      payload,
+      to_candid (payload),
     );
 
     #ok(match);
@@ -419,15 +462,17 @@ persistent actor {
   };
 
   public shared ({ caller }) func make_match(is_rank : Bool) : async Result.Result<Types.MatchCreated, Text> {
+    let now = Nat64.fromIntWrap(Time.now());
+
     if (not can_join_room(caller)) {
       return #err("Can't make match");
     };
 
-    let all_rooms = Map.entries<Principal, Bool>(rooms);
+    let all_rooms = Map.entries<Principal, (Nat64, Bool)>(rooms);
 
-    for ((opponent, opponent_is_rank) in all_rooms) {
+    for ((opponent, (created, opponent_is_rank)) in all_rooms) {
       if (opponent_is_rank == is_rank) {
-        Map.remove<Principal, Bool>(rooms, Principal.compare, opponent);
+        Map.remove<Principal, (Nat64, Bool)>(rooms, Principal.compare, opponent);
 
         let match = await create_match(opponent, caller, is_rank);
 
@@ -442,7 +487,7 @@ persistent actor {
       };
     };
 
-    Map.add(rooms, Principal.compare, caller, is_rank);
+    Map.add(rooms, Principal.compare, caller, (now, is_rank));
     return #ok(#text("Waiting opponent..."));
   };
 
@@ -516,14 +561,14 @@ persistent actor {
           messages,
           match.white_player,
           "move_created",
-          payload,
+          to_candid (payload),
         );
 
         Message.push_message(
           messages,
           match.black_player,
           "move_created",
-          payload,
+          to_candid (payload),
         );
 
         switch (game_status, turn) {
@@ -555,7 +600,7 @@ persistent actor {
   };
 
   public shared ({ caller }) func cancel_match_room() : async () {
-    Map.remove<Principal, Bool>(rooms, Principal.compare, caller);
+    Map.remove<Principal, (Nat64, Bool)>(rooms, Principal.compare, caller);
   };
 
   public shared ({ caller }) func resign() : async (Result.Result<Bool, Text>) {
@@ -585,7 +630,15 @@ persistent actor {
             return #ok(match);
           };
           case null {
-            return #err("No active match found");
+            let is_on_room = Option.isSome(
+              Map.get<Principal, (Nat64, Bool)>(rooms, Principal.compare, user_principal)
+            );
+
+            if (is_on_room) {
+              return #err("waiting for opponent");
+            } else {
+              return #err("no active match found");
+            }
 
           };
         };
@@ -667,8 +720,6 @@ persistent actor {
     var results : [Types.MatchResultHistory] = [];
     var i = start;
 
-    Debug.print(Nat.toText(Array.size(user_histories)) # "WEH EHEHEH");
-
     label l while (true) {
       if (i >= Array.size(user_histories)) {
         break l;
@@ -717,7 +768,7 @@ persistent actor {
     };
 
     func prechange_username(username : Text) : async () {
-      if (Option.isSome(Map.get(users, Text.compare, username))) {
+      if (Option.isSome(Map.get(usernames, Text.compare, username))) {
         Debug.trap("Username exists");
       };
 
@@ -725,6 +776,7 @@ persistent actor {
 
       switch (user) {
         case (#ok(user)) {
+          Map.add<Text, Principal>(usernames, Text.compare, username, caller);
 
           switch (user.username) {
             case (?current_username) {
@@ -768,7 +820,7 @@ persistent actor {
           Option.get(new_user.country, "")
         )
       ) {
-        return #err("Country code invalid");
+        return #err("country code invalid");
       }
 
     };
@@ -829,7 +881,7 @@ persistent actor {
           messages,
           to,
           "incoming_friendship",
-          payload,
+          to_candid (payload),
         );
 
         return user_object.send_friendship(to);
@@ -854,7 +906,7 @@ persistent actor {
           messages,
           from,
           "accepted_friendship",
-          payload,
+          to_candid (payload),
         );
         return user_object.accept_friendship(from);
       };
@@ -877,7 +929,7 @@ persistent actor {
           messages,
           from,
           "rejected_friendship",
-          payload,
+          to_candid (payload),
         );
         return user_object.reject_friendship(from);
       };
@@ -896,6 +948,19 @@ persistent actor {
       };
       case null {
         return #err("User not found");
+      };
+    };
+  };
+
+  public query func get_principal_from_username(username : Text) : async (Result.Result<Principal, Text>) {
+    let principal = Map.get<Text, Principal>(usernames, Text.compare, Text.toLower(username));
+
+    switch (principal) {
+      case (?principal) {
+        return #ok(principal);
+      };
+      case null {
+        return #err("Username not found");
       };
     };
   };
